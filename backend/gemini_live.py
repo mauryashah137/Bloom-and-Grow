@@ -284,9 +284,11 @@ class GeminiLiveSession:
                     await self._dispatch_tool(session, fc)
 
         except Exception as e:
-            logger.error(f"[{self.session_id}] Receive loop error: {e}")
+            logger.error(f"[{self.session_id}] Receive loop error: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
-        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed})")
+        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed}, audio_in={self._audio_in_count})")
 
     async def _approval_monitor(self, session):
         """
@@ -469,11 +471,16 @@ class GeminiLiveSession:
         """Send PCM 16kHz audio chunk from microphone."""
         if self._session and not self._closed:
             self._audio_in_count += 1
-            if self._audio_in_count <= 3 or self._audio_in_count % 100 == 0:
-                logger.info(f"[{self.session_id}] Audio in #{self._audio_in_count} ({len(b64)} b64 chars)")
-            await self._session.send_realtime_input(
-                audio=types.Blob(data=base64.b64decode(b64), mime_type="audio/pcm;rate=16000")
-            )
+            raw = base64.b64decode(b64)
+            if self._audio_in_count <= 5 or self._audio_in_count % 200 == 0:
+                logger.info(f"[{self.session_id}] Audio in #{self._audio_in_count} ({len(raw)} bytes, {len(b64)} b64)")
+            try:
+                await self._session.send_realtime_input(
+                    audio=types.Blob(data=raw, mime_type="audio/pcm;rate=16000")
+                )
+            except Exception as e:
+                logger.error(f"[{self.session_id}] send_audio error: {e}")
+                self._closed = True
 
     async def send_video_frame(self, b64: str):
         """Send a live camera frame (JPEG) for real-time visual context."""

@@ -83,27 +83,36 @@ export function useGeminiSession() {
   const startMic = useCallback(async () => {
     if (micStreamRef.current) return;
 
-    // Create recording context at 16kHz
+    // Get mic stream first, then create AudioContext at 16kHz for Gemini
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    micStreamRef.current = stream;
+
+    // Create recording context — request 16kHz (Gemini's expected input rate)
     if (!recCtxRef.current || recCtxRef.current.state === "closed") {
       recCtxRef.current = new AudioContext({ sampleRate: 16000 });
     }
     const ctx = recCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-    micStreamRef.current = stream;
+    console.log(`[Mic] AudioContext sample rate: ${ctx.sampleRate}`);
 
     try { await ctx.audioWorklet.addModule("/pcm-processor.js"); } catch {}
 
     const source = ctx.createMediaStreamSource(stream);
     const worklet = new AudioWorkletNode(ctx, "pcm-processor");
 
+    // Send audio chunks as base64 JSON
     worklet.port.onmessage = (ev) => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(ev.data)));
-      wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: b64 }));
+      const pcmBytes = new Uint8Array(ev.data);
+      // Convert to base64 in chunks to avoid call stack overflow
+      let b64 = "";
+      const CHUNK = 8192;
+      for (let i = 0; i < pcmBytes.length; i += CHUNK) {
+        b64 += String.fromCharCode.apply(null, Array.from(pcmBytes.subarray(i, i + CHUNK)));
+      }
+      wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(b64) }));
     };
 
     // Connect source → worklet only (NOT to destination — prevents echo)
