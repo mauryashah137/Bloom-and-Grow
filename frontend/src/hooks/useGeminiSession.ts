@@ -1,10 +1,10 @@
 "use client";
 /**
- * Gemini Live Session Hook — Audio system based on Google's ADK demo.
- * Uses ring buffer AudioWorklet for playback (no repeating/gaps).
- * Mic auto-starts on connect. Continuous conversation like a phone call.
+ * Gemini Live Session Hook
+ * Audio playback uses simple AudioBufferSourceNode scheduling (no worklet dependency).
+ * Mic uses pcm-processor worklet for capture.
  */
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { useStore } from "@/store";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
@@ -14,16 +14,16 @@ export { API_BASE };
 
 export function useGeminiSession() {
   const wsRef        = useRef<WebSocket | null>(null);
+  // Playback (24kHz) — simple buffer source scheduling
+  const playCtxRef   = useRef<AudioContext | null>(null);
+  const nextPlayTime = useRef<number>(0);
+  const playingNodes = useRef<Set<AudioBufferSourceNode>>(new Set());
   // Recording (16kHz)
   const recCtxRef    = useRef<AudioContext | null>(null);
   const recWorkletRef = useRef<AudioWorkletNode | null>(null);
   const recSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
-  // Playback (24kHz) — ring buffer approach
-  const playCtxRef   = useRef<AudioContext | null>(null);
-  const playerRef    = useRef<AudioWorkletNode | null>(null);
-  const speakingRef  = useRef(false);
-  const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micSampleRateRef = useRef<number>(16000);
   // Camera
   const cameraRef    = useRef<MediaStream | null>(null);
   const camIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -31,7 +31,7 @@ export function useGeminiSession() {
 
   const store = useStore();
 
-  // ── Setup playback context (24kHz) with ring buffer worklet ────────────
+  // ── Ensure playback AudioContext (24kHz) ──────────────────────────────
   const ensurePlayback = useCallback(async () => {
     if (playCtxRef.current && playCtxRef.current.state !== "closed") {
       if (playCtxRef.current.state === "suspended") await playCtxRef.current.resume();
@@ -39,83 +39,82 @@ export function useGeminiSession() {
     }
     const ctx = new AudioContext({ sampleRate: 24000 });
     playCtxRef.current = ctx;
-    await ctx.audioWorklet.addModule("/pcm-player-processor.js");
-    const playerNode = new AudioWorkletNode(ctx, "pcm-player-processor");
-    playerNode.connect(ctx.destination);
-    playerRef.current = playerNode;
+    nextPlayTime.current = ctx.currentTime;
+    console.log(`[Playback] AudioContext created, state=${ctx.state}, sampleRate=${ctx.sampleRate}`);
   }, []);
 
-  // ── Play audio chunk — sends PCM data to ring buffer worklet ──────────
-  const audioChunkCount = useRef(0);
-
-  const playChunk = useCallback(async (b64: string) => {
-    // Ensure AudioContext is resumed (browsers suspend until user gesture)
+  // ── Play PCM audio chunk — simple, reliable scheduling ────────────────
+  const playChunk = useCallback((b64: string) => {
     const ctx = playCtxRef.current;
-    if (ctx && ctx.state === "suspended") {
-      try { await ctx.resume(); } catch {}
+    if (!ctx) { console.warn("[Playback] No AudioContext"); return; }
+
+    // Resume if suspended (browser autoplay policy)
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
     }
 
-    const player = playerRef.current;
-    if (!player) {
-      console.warn("[Audio] No player node — playback not initialized");
-      return;
-    }
+    // Decode base64 → bytes → Int16 → Float32
+    const raw = atob(b64);
+    const len = raw.length;
+    if (len < 2) return;
 
-    // Decode base64 to ArrayBuffer
-    const binaryStr = atob(b64);
-    const len = binaryStr.length;
     const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+    for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
 
-    // Send raw PCM bytes to the ring buffer worklet
-    player.port.postMessage(bytes.buffer);
+    const i16 = new Int16Array(bytes.buffer);
+    const f32 = new Float32Array(i16.length);
+    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
 
-    audioChunkCount.current++;
-    if (audioChunkCount.current <= 3) {
-      console.log(`[Audio] Chunk #${audioChunkCount.current}: ${len} bytes, ctx.state=${ctx?.state}`);
-    }
+    // Create buffer and schedule playback
+    const buf = ctx.createBuffer(1, f32.length, 24000);
+    buf.copyToChannel(f32, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
 
-    // Mark as speaking
-    if (!speakingRef.current) {
-      speakingRef.current = true;
-      store.setAgentSpeaking(true);
-    }
-    // Reset the "stopped speaking" timer
-    if (speakingTimer.current) clearTimeout(speakingTimer.current);
-    speakingTimer.current = setTimeout(() => {
-      speakingRef.current = false;
-      store.setAgentSpeaking(false);
-    }, 500);
+    const now = ctx.currentTime;
+    const startAt = Math.max(nextPlayTime.current, now);
+    src.start(startAt);
+    nextPlayTime.current = startAt + buf.duration;
+
+    playingNodes.current.add(src);
+    store.setAgentSpeaking(true);
+
+    src.onended = () => {
+      playingNodes.current.delete(src);
+      if (playingNodes.current.size === 0) {
+        // Small delay to check if more chunks are coming
+        setTimeout(() => {
+          if (playingNodes.current.size === 0) store.setAgentSpeaking(false);
+        }, 300);
+      }
+    };
   }, [store]);
 
-  // ── Stop playback (interrupt) ─────────────────────────────────────────
+  // ── Stop playback ─────────────────────────────────────────────────────
   const stopPlayback = useCallback(() => {
-    playerRef.current?.port.postMessage({ command: "clear" });
-    speakingRef.current = false;
+    playingNodes.current.forEach(src => { try { src.stop(); } catch {} });
+    playingNodes.current.clear();
+    if (playCtxRef.current) nextPlayTime.current = playCtxRef.current.currentTime;
     store.setAgentSpeaking(false);
   }, [store]);
 
-  // ── Microphone — auto-starts, stays on ────────────────────────────────
-  const micSampleRateRef = useRef<number>(16000);
-
+  // ── Microphone ────────────────────────────────────────────────────────
   const startMic = useCallback(async () => {
     if (micStreamRef.current) return;
 
-    // Get mic stream
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     micStreamRef.current = stream;
 
-    // Create recording context — request 16kHz (Gemini's expected input rate)
-    // Note: browser may give a different rate; the worklet will report the actual rate
     if (!recCtxRef.current || recCtxRef.current.state === "closed") {
       recCtxRef.current = new AudioContext({ sampleRate: 16000 });
     }
     const ctx = recCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
-    console.log(`[Mic] AudioContext actual sample rate: ${ctx.sampleRate}`);
     micSampleRateRef.current = ctx.sampleRate;
+    console.log(`[Mic] AudioContext sampleRate=${ctx.sampleRate}`);
 
     try { await ctx.audioWorklet.addModule("/pcm-processor.js"); } catch {}
 
@@ -124,25 +123,19 @@ export function useGeminiSession() {
 
     worklet.port.onmessage = (ev) => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
       const msg = ev.data;
 
-      // Handle sample rate report from worklet
       if (msg && msg.type === "sampleRate") {
-        console.log(`[Mic] Worklet reports sampleRate: ${msg.sampleRate}`);
         micSampleRateRef.current = msg.sampleRate;
-        // Tell backend the actual sample rate
         wsRef.current.send(JSON.stringify({ type: "sample_rate", rate: msg.sampleRate }));
         return;
       }
 
-      // Handle audio data
       const audioData = msg?.data || msg;
       if (!audioData) return;
       const pcmBytes = new Uint8Array(audioData);
       if (pcmBytes.length === 0) return;
 
-      // Convert to base64
       let binary = "";
       const CHUNK = 8192;
       for (let i = 0; i < pcmBytes.length; i += CHUNK) {
@@ -151,7 +144,6 @@ export function useGeminiSession() {
       wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(binary) }));
     };
 
-    // Connect source → worklet only (NOT to destination — prevents echo)
     source.connect(worklet);
     recSourceRef.current = source;
     recWorkletRef.current = worklet;
@@ -179,7 +171,6 @@ export function useGeminiSession() {
     store.setSessionError(null);
     store.clearActionCards();
     await ensurePlayback();
-    console.log(`[Connect] Playback ready: ctx.state=${playCtxRef.current?.state}, player=${!!playerRef.current}`);
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
@@ -201,7 +192,6 @@ export function useGeminiSession() {
           store.setSessionId(ev.session_id);
           store.setSessionStatus("connected");
           if (ev.customer) store.setCustomer(ev.customer);
-          // Auto-start mic — like a phone call
           startMic();
           break;
 
@@ -213,9 +203,7 @@ export function useGeminiSession() {
           if (ev.final) {
             store.addTranscript({
               id: `${ev.role}-${ev.ts}-${Math.random().toString(36).slice(2,6)}`,
-              role: ev.role,
-              text: ev.text,
-              ts: ev.ts,
+              role: ev.role, text: ev.text, ts: ev.ts,
             });
           }
           break;
@@ -284,7 +272,7 @@ export function useGeminiSession() {
     };
 
     ws.onerror = () => {
-      store.setSessionError("Connection failed. Check backend URL.");
+      store.setSessionError("Connection failed.");
       store.setSessionStatus("error");
     };
     ws.onclose = () => {
@@ -306,7 +294,6 @@ export function useGeminiSession() {
     const canvas = canvasRef.current;
     canvas.width = 768; canvas.height = 768;
     store.setCameraActive(true);
-    // 1 FPS as per ADK spec
     camIntervalRef.current = setInterval(() => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
       const ctx2d = canvas.getContext("2d");
@@ -350,10 +337,6 @@ export function useGeminiSession() {
   const sendText = useCallback((text: string) => {
     wsRef.current?.send(JSON.stringify({ type: "text", content: text }));
   }, []);
-
-  // NOTE: No useEffect cleanup — we don't want to disconnect on component re-render.
-  // The connection persists until the user explicitly clicks "end call".
-  // Cleanup happens in disconnect() which is called by the end call button.
 
   return { connect, disconnect, toggleMic, startMic, stopMic, startCamera, stopCamera, sendImage, sendText, stopPlayback };
 }
