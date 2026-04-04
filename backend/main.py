@@ -215,6 +215,10 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
                 msg = json.loads(raw)
                 t   = msg.get("type")
                 if   t == "audio_chunk":  await gemini.send_audio(msg["data"])
+                elif t == "sample_rate":
+                    rate = msg.get("rate", 16000)
+                    gemini.set_audio_sample_rate(rate)
+                    logger.info(f"[{session_id}] Client audio sample rate: {rate}")
                 elif t == "video_frame":  await gemini.send_video_frame(msg["data"])
                 elif t == "image_upload":
                     await gemini.send_image(msg["data"], msg.get("mime_type", "image/jpeg"))

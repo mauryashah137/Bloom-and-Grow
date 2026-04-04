@@ -80,39 +80,59 @@ export function useGeminiSession() {
   }, [store]);
 
   // ── Microphone — auto-starts, stays on ────────────────────────────────
+  const micSampleRateRef = useRef<number>(16000);
+
   const startMic = useCallback(async () => {
     if (micStreamRef.current) return;
 
-    // Get mic stream first, then create AudioContext at 16kHz for Gemini
+    // Get mic stream
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     micStreamRef.current = stream;
 
     // Create recording context — request 16kHz (Gemini's expected input rate)
+    // Note: browser may give a different rate; the worklet will report the actual rate
     if (!recCtxRef.current || recCtxRef.current.state === "closed") {
       recCtxRef.current = new AudioContext({ sampleRate: 16000 });
     }
     const ctx = recCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();
-    console.log(`[Mic] AudioContext sample rate: ${ctx.sampleRate}`);
+    console.log(`[Mic] AudioContext actual sample rate: ${ctx.sampleRate}`);
+    micSampleRateRef.current = ctx.sampleRate;
 
     try { await ctx.audioWorklet.addModule("/pcm-processor.js"); } catch {}
 
     const source = ctx.createMediaStreamSource(stream);
     const worklet = new AudioWorkletNode(ctx, "pcm-processor");
 
-    // Send audio chunks as base64 JSON
     worklet.port.onmessage = (ev) => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-      const pcmBytes = new Uint8Array(ev.data);
-      // Convert to base64 in chunks to avoid call stack overflow
-      let b64 = "";
+
+      const msg = ev.data;
+
+      // Handle sample rate report from worklet
+      if (msg && msg.type === "sampleRate") {
+        console.log(`[Mic] Worklet reports sampleRate: ${msg.sampleRate}`);
+        micSampleRateRef.current = msg.sampleRate;
+        // Tell backend the actual sample rate
+        wsRef.current.send(JSON.stringify({ type: "sample_rate", rate: msg.sampleRate }));
+        return;
+      }
+
+      // Handle audio data
+      const audioData = msg?.data || msg;
+      if (!audioData) return;
+      const pcmBytes = new Uint8Array(audioData);
+      if (pcmBytes.length === 0) return;
+
+      // Convert to base64
+      let binary = "";
       const CHUNK = 8192;
       for (let i = 0; i < pcmBytes.length; i += CHUNK) {
-        b64 += String.fromCharCode.apply(null, Array.from(pcmBytes.subarray(i, i + CHUNK)));
+        binary += String.fromCharCode.apply(null, Array.from(pcmBytes.subarray(i, i + CHUNK)));
       }
-      wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(b64) }));
+      wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: btoa(binary) }));
     };
 
     // Connect source → worklet only (NOT to destination — prevents echo)

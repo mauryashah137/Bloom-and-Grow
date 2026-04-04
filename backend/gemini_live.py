@@ -197,6 +197,7 @@ class GeminiLiveSession:
         self._last_discount_state = None
 
         self._audio_in_count = 0
+        self._audio_sample_rate = 16000  # Will be updated by client
         self._connect_task = asyncio.create_task(self._connect())
 
     async def _connect(self):
@@ -467,20 +468,29 @@ class GeminiLiveSession:
 
     # ── Input methods ────────────────────────────────────────────────────────
 
+    def set_audio_sample_rate(self, rate: int):
+        """Set the actual sample rate from the client's AudioContext."""
+        self._audio_sample_rate = rate
+        logger.info(f"[{self.session_id}] Audio sample rate set to {rate}Hz")
+
     async def send_audio(self, b64: str):
-        """Send PCM 16kHz audio chunk from microphone."""
+        """Send PCM audio chunk from microphone at the client's actual sample rate."""
         if self._session and not self._closed:
             self._audio_in_count += 1
             raw = base64.b64decode(b64)
             if self._audio_in_count <= 5 or self._audio_in_count % 200 == 0:
-                # Check if audio has actual content (not silence)
                 import struct
-                samples = struct.unpack(f"<{len(raw)//2}h", raw)
-                max_val = max(abs(s) for s in samples[:100]) if samples else 0
-                logger.info(f"[{self.session_id}] Audio in #{self._audio_in_count} ({len(raw)}B, max_amplitude={max_val})")
+                n_samples = len(raw) // 2
+                if n_samples > 0:
+                    samples = struct.unpack(f"<{n_samples}h", raw)
+                    max_val = max(abs(s) for s in samples[:100])
+                else:
+                    max_val = 0
+                logger.info(f"[{self.session_id}] Audio #{self._audio_in_count}: {len(raw)}B, {n_samples} samples, max_amp={max_val}, rate={self._audio_sample_rate}")
             try:
+                mime = f"audio/pcm;rate={self._audio_sample_rate}"
                 await self._session.send_realtime_input(
-                    audio=types.Blob(data=raw, mime_type="audio/pcm;rate=16000")
+                    audio=types.Blob(data=raw, mime_type=mime)
                 )
             except Exception as e:
                 logger.error(f"[{self.session_id}] send_audio error: {e}")
