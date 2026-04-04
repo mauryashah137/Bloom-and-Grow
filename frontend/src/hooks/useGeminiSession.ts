@@ -1,4 +1,9 @@
 "use client";
+/**
+ * Gemini Live Session Hook — Audio system based on Google's ADK demo.
+ * Uses ring buffer AudioWorklet for playback (no repeating/gaps).
+ * Mic auto-starts on connect. Continuous conversation like a phone call.
+ */
 import { useCallback, useEffect, useRef } from "react";
 import { useStore } from "@/store";
 
@@ -8,89 +13,87 @@ const API_BASE = WS_URL.replace(/^wss?:\/\//, "https://").replace("/ws", "");
 export { API_BASE };
 
 export function useGeminiSession() {
-  const wsRef       = useRef<WebSocket | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const workletRef  = useRef<AudioWorkletNode | null>(null);
-  const sourceRef   = useRef<MediaStreamAudioSourceNode | null>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
-  const cameraRef   = useRef<MediaStream | null>(null);
+  const wsRef        = useRef<WebSocket | null>(null);
+  // Recording (16kHz)
+  const recCtxRef    = useRef<AudioContext | null>(null);
+  const recWorkletRef = useRef<AudioWorkletNode | null>(null);
+  const recSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  // Playback (24kHz) — ring buffer approach
+  const playCtxRef   = useRef<AudioContext | null>(null);
+  const playerRef    = useRef<AudioWorkletNode | null>(null);
+  const speakingRef  = useRef(false);
+  const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Camera
+  const cameraRef    = useRef<MediaStream | null>(null);
   const camIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const canvasRef   = useRef<HTMLCanvasElement | null>(null);
-  const nextPlayRef = useRef<number>(0);
-  const playingRef  = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const canvasRef    = useRef<HTMLCanvasElement | null>(null);
+
   const store = useStore();
 
-  // ── Audio context setup ─────────────────────────────────────────────────
-  const ensureAudio = useCallback(async () => {
-    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-      if (audioCtxRef.current.state === "suspended") {
-        await audioCtxRef.current.resume();
-      }
+  // ── Setup playback context (24kHz) with ring buffer worklet ────────────
+  const ensurePlayback = useCallback(async () => {
+    if (playCtxRef.current && playCtxRef.current.state !== "closed") {
+      if (playCtxRef.current.state === "suspended") await playCtxRef.current.resume();
       return;
     }
-    audioCtxRef.current = new AudioContext({ sampleRate: 24000 });
-    nextPlayRef.current = audioCtxRef.current.currentTime;
+    const ctx = new AudioContext({ sampleRate: 24000 });
+    playCtxRef.current = ctx;
+    await ctx.audioWorklet.addModule("/pcm-player-processor.js");
+    const playerNode = new AudioWorkletNode(ctx, "pcm-player-processor");
+    playerNode.connect(ctx.destination);
+    playerRef.current = playerNode;
   }, []);
 
-  // ── Play audio chunk from agent — prevents repeating ────────────────────
+  // ── Play audio chunk — sends PCM data to ring buffer worklet ──────────
   const playChunk = useCallback((b64: string) => {
-    const ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === "closed") return;
+    const player = playerRef.current;
+    if (!player) return;
 
-    store.setAgentSpeaking(true);
+    // Decode base64 to ArrayBuffer
+    const binaryStr = atob(b64);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    // Ensure byte alignment for Int16Array
-    const aligned = bytes.length % 2 === 0 ? bytes : bytes.slice(0, bytes.length - 1);
-    if (aligned.length === 0) return;
+    // Send raw PCM bytes to the ring buffer worklet
+    player.port.postMessage(bytes.buffer);
 
-    const i16 = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.length / 2);
-    const f32 = new Float32Array(i16.length);
-    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
-
-    const buf = ctx.createBuffer(1, f32.length, 24000);
-    buf.copyToChannel(f32, 0);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-
-    // Schedule after current playback — prevent overlaps/repeating
-    const now = ctx.currentTime;
-    const startAt = Math.max(nextPlayRef.current, now);
-    src.start(startAt);
-    nextPlayRef.current = startAt + buf.duration;
-
-    playingRef.current.add(src);
-    src.onended = () => {
-      playingRef.current.delete(src);
-      if (playingRef.current.size === 0 && nextPlayRef.current <= ctx.currentTime + 0.15) {
-        store.setAgentSpeaking(false);
-      }
-    };
+    // Mark as speaking
+    if (!speakingRef.current) {
+      speakingRef.current = true;
+      store.setAgentSpeaking(true);
+    }
+    // Reset the "stopped speaking" timer
+    if (speakingTimer.current) clearTimeout(speakingTimer.current);
+    speakingTimer.current = setTimeout(() => {
+      speakingRef.current = false;
+      store.setAgentSpeaking(false);
+    }, 500);
   }, [store]);
 
-  // ── Stop all playing audio (for interruption) ──────────────────────────
+  // ── Stop playback (interrupt) ─────────────────────────────────────────
   const stopPlayback = useCallback(() => {
-    playingRef.current.forEach(src => {
-      try { src.stop(); } catch {}
-    });
-    playingRef.current.clear();
-    if (audioCtxRef.current) {
-      nextPlayRef.current = audioCtxRef.current.currentTime;
-    }
+    playerRef.current?.port.postMessage({ command: "clear" });
+    speakingRef.current = false;
     store.setAgentSpeaking(false);
   }, [store]);
 
-  // ── Microphone — starts automatically on connect, stays on ──────────────
+  // ── Microphone — auto-starts, stays on ────────────────────────────────
   const startMic = useCallback(async () => {
-    if (streamRef.current) return; // Already running
-    await ensureAudio();
-    const ctx = audioCtxRef.current!;
+    if (micStreamRef.current) return;
+
+    // Create recording context at 16kHz
+    if (!recCtxRef.current || recCtxRef.current.state === "closed") {
+      recCtxRef.current = new AudioContext({ sampleRate: 16000 });
+    }
+    const ctx = recCtxRef.current;
+    if (ctx.state === "suspended") await ctx.resume();
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    streamRef.current = stream;
+    micStreamRef.current = stream;
 
     try { await ctx.audioWorklet.addModule("/pcm-processor.js"); } catch {}
 
@@ -103,20 +106,20 @@ export function useGeminiSession() {
       wsRef.current.send(JSON.stringify({ type: "audio_chunk", data: b64 }));
     };
 
-    // Connect source → worklet only (NOT to destination — that causes echo)
+    // Connect source → worklet only (NOT to destination — prevents echo)
     source.connect(worklet);
-    sourceRef.current = source;
-    workletRef.current = worklet;
+    recSourceRef.current = source;
+    recWorkletRef.current = worklet;
     store.setMicActive(true);
-  }, [ensureAudio, store]);
+  }, [store]);
 
   const stopMic = useCallback(() => {
-    sourceRef.current?.disconnect();
-    sourceRef.current = null;
-    workletRef.current?.disconnect();
-    workletRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
+    recSourceRef.current?.disconnect();
+    recSourceRef.current = null;
+    recWorkletRef.current?.disconnect();
+    recWorkletRef.current = null;
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
     store.setMicActive(false);
   }, [store]);
 
@@ -124,13 +127,13 @@ export function useGeminiSession() {
     if (store.isMicActive) stopMic(); else await startMic();
   }, [store.isMicActive, startMic, stopMic]);
 
-  // ── Connect WebSocket — auto-starts mic after session starts ────────────
+  // ── Connect WebSocket ─────────────────────────────────────────────────
   const connect = useCallback(async () => {
     if (wsRef.current) return;
     store.setSessionStatus("connecting");
     store.setSessionError(null);
     store.clearActionCards();
-    await ensureAudio();
+    await ensurePlayback();
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
@@ -145,13 +148,14 @@ export function useGeminiSession() {
 
     ws.onmessage = (e) => {
       const ev = JSON.parse(e.data);
-      if (ev.type === "ping") return; // Keepalive — ignore
+      if (ev.type === "ping") return;
+
       switch (ev.type) {
         case "session_started":
           store.setSessionId(ev.session_id);
           store.setSessionStatus("connected");
           if (ev.customer) store.setCustomer(ev.customer);
-          // Auto-start microphone — like a phone call
+          // Auto-start mic — like a phone call
           startMic();
           break;
 
@@ -172,11 +176,8 @@ export function useGeminiSession() {
 
         case "tool_call":
           if (ev.status === "success") {
-            if (ev.tool === "add_to_cart" && ev.result?.cart) {
-              store.setCart(ev.result.cart);
-            } else if (ev.tool === "remove_from_cart" && ev.result?.cart) {
-              store.setCart(ev.result.cart);
-            }
+            if (ev.tool === "add_to_cart" && ev.result?.cart) store.setCart(ev.result.cart);
+            else if (ev.tool === "remove_from_cart" && ev.result?.cart) store.setCart(ev.result.cart);
           }
           break;
 
@@ -187,26 +188,13 @@ export function useGeminiSession() {
         case "recommendation":
           if (ev.products?.length) {
             store.setRecommendations(ev.products);
-            store.addActionCard({
-              id: `rec-${Date.now()}`,
-              type: "recommendation",
-              title: "Recommended for you",
-              products: ev.products,
-              ts: Date.now() / 1000,
-            });
+            store.addActionCard({ id: `rec-${Date.now()}`, type: "recommendation", title: "Recommended for you", products: ev.products, ts: Date.now() / 1000 });
           }
           break;
 
         case "vision_result":
           store.setVisionResult(ev);
-          store.addActionCard({
-            id: `vis-${Date.now()}`,
-            type: "vision",
-            title: ev.candidates?.[0]?.name || "Visual Identification",
-            visionResult: ev,
-            products: ev.catalog_matches || [],
-            ts: Date.now() / 1000,
-          });
+          store.addActionCard({ id: `vis-${Date.now()}`, type: "vision", title: ev.candidates?.[0]?.name || "Visual Identification", visionResult: ev, products: ev.catalog_matches || [], ts: Date.now() / 1000 });
           break;
 
         case "sentiment":
@@ -214,63 +202,27 @@ export function useGeminiSession() {
           break;
 
         case "discount_pending":
-          store.setDiscountRequest({
-            request_id: ev.request_id, discount_pct: ev.amount,
-            reason: ev.reason, status: "pending",
-          });
-          store.addActionCard({
-            id: `disc-${ev.request_id}`, type: "discount_status",
-            title: "Checking with supervisor...",
-            message: `Requesting ${ev.amount}% discount — waiting for manager approval`,
-            discountRequest: { request_id: ev.request_id, discount_pct: ev.amount, reason: ev.reason, status: "pending" },
-            ts: Date.now() / 1000,
-          });
+          store.setDiscountRequest({ request_id: ev.request_id, discount_pct: ev.amount, reason: ev.reason, status: "pending" });
+          store.addActionCard({ id: `disc-${ev.request_id}`, type: "discount_status", title: "Checking with supervisor...", message: `Requesting ${ev.amount}% discount`, discountRequest: { request_id: ev.request_id, discount_pct: ev.amount, reason: ev.reason, status: "pending" }, ts: Date.now() / 1000 });
           break;
 
         case "discount_resolved":
-          store.setDiscountRequest({
-            request_id: ev.request_id, discount_pct: ev.discount_pct,
-            reason: ev.note || "", status: ev.approved ? "approved" : "rejected",
-          });
-          store.addActionCard({
-            id: `disc-resolved-${ev.request_id}`, type: "discount_status",
-            title: ev.approved ? "Discount approved!" : "Discount not available",
-            message: ev.approved
-              ? `${ev.discount_pct}% discount has been applied to your cart!`
-              : `Unable to offer ${ev.original_pct || ev.discount_pct}% at this time. ${ev.note || ""}`,
-            discountRequest: {
-              request_id: ev.request_id, discount_pct: ev.discount_pct,
-              reason: ev.note || "", status: ev.approved ? "approved" : "rejected",
-            },
-            ts: Date.now() / 1000,
-          });
+          store.setDiscountRequest({ request_id: ev.request_id, discount_pct: ev.discount_pct, reason: ev.note || "", status: ev.approved ? "approved" : "rejected" });
+          store.addActionCard({ id: `disc-r-${ev.request_id}`, type: "discount_status", title: ev.approved ? "Discount approved!" : "Discount not available", message: ev.approved ? `${ev.discount_pct}% discount applied!` : `Unable to offer that discount. ${ev.note || ""}`, discountRequest: { request_id: ev.request_id, discount_pct: ev.discount_pct, reason: ev.note || "", status: ev.approved ? "approved" : "rejected" }, ts: Date.now() / 1000 });
           break;
 
         case "booking_confirmed":
           store.setLastBooking(ev.booking);
-          store.addActionCard({
-            id: `book-${Date.now()}`, type: "booking",
-            title: "Booking confirmed!", booking: ev.booking,
-            ts: Date.now() / 1000,
-          });
+          store.addActionCard({ id: `book-${Date.now()}`, type: "booking", title: "Booking confirmed!", booking: ev.booking, ts: Date.now() / 1000 });
           break;
 
         case "order_created":
           store.addOrder(ev.order);
-          store.addActionCard({
-            id: `order-${Date.now()}`, type: "order",
-            title: "Order placed!", order: ev.order,
-            ts: Date.now() / 1000,
-          });
+          store.addActionCard({ id: `order-${Date.now()}`, type: "order", title: "Order placed!", order: ev.order, ts: Date.now() / 1000 });
           break;
 
         case "handoff_created":
-          store.addActionCard({
-            id: `handoff-${ev.handoff_id}`, type: "handoff",
-            title: "Connecting you to a specialist",
-            message: `You're #${ev.queue_position} in queue. Estimated wait: ${ev.estimated_wait_minutes} minutes.`,
-            ts: Date.now() / 1000,
-          });
+          store.addActionCard({ id: `handoff-${ev.handoff_id}`, type: "handoff", title: "Connecting you to a specialist", message: `You're #${ev.queue_position} in queue. Est. wait: ${ev.estimated_wait_minutes} min.`, ts: Date.now() / 1000 });
           break;
 
         case "session_ended":
@@ -286,7 +238,7 @@ export function useGeminiSession() {
     };
 
     ws.onerror = () => {
-      store.setSessionError("Connection failed. Check your backend URL.");
+      store.setSessionError("Connection failed. Check backend URL.");
       store.setSessionStatus("error");
     };
     ws.onclose = () => {
@@ -296,25 +248,25 @@ export function useGeminiSession() {
       stopPlayback();
       if (store.sessionStatus !== "error") store.setSessionStatus("idle");
     };
-  }, [store, ensureAudio, playChunk, startMic, stopPlayback]);
+  }, [store, ensurePlayback, playChunk, startMic, stopPlayback]);
 
-  // ── Camera — sends frames at 1fps ──────────────────────────────────────
+  // ── Camera ────────────────────────────────────────────────────────────
   const startCamera = useCallback(async (videoEl: HTMLVideoElement) => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 768, height: 768, facingMode: "user" } });
     cameraRef.current = stream;
     videoEl.srcObject = stream;
     await videoEl.play();
     if (!canvasRef.current) canvasRef.current = document.createElement("canvas");
     const canvas = canvasRef.current;
-    canvas.width = 320; canvas.height = 240;
+    canvas.width = 768; canvas.height = 768;
     store.setCameraActive(true);
-    // Send frames at 1fps (every 1000ms) — better for bandwidth + Gemini processing
+    // 1 FPS as per ADK spec
     camIntervalRef.current = setInterval(() => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
       const ctx2d = canvas.getContext("2d");
       if (!ctx2d) return;
-      ctx2d.drawImage(videoEl, 0, 0, 320, 240);
-      const b64 = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+      ctx2d.drawImage(videoEl, 0, 0, 768, 768);
+      const b64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
       wsRef.current.send(JSON.stringify({ type: "video_frame", data: b64 }));
     }, 1000);
   }, [store]);
@@ -326,7 +278,7 @@ export function useGeminiSession() {
     store.setCameraActive(false);
   }, [store]);
 
-  // ── Disconnect — must be after stopCamera is defined ─────────────────────
+  // ── Disconnect ────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
     stopMic();
     stopCamera();
@@ -358,7 +310,8 @@ export function useGeminiSession() {
       stopMic();
       stopCamera();
       stopPlayback();
-      try { audioCtxRef.current?.close(); } catch {}
+      try { recCtxRef.current?.close(); } catch {}
+      try { playCtxRef.current?.close(); } catch {}
     };
   }, []);
 
