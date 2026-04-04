@@ -238,8 +238,12 @@ class GeminiLiveSession:
 
     async def _receive_loop(self, session):
         logger.info(f"[{self.session_id}] Starting receive loop")
+        response_count = 0
         try:
             async for response in session.receive():
+                response_count += 1
+                if response_count <= 3:
+                    logger.info(f"[{self.session_id}] Response #{response_count}: data={response.data is not None}, server_content={response.server_content is not None}, tool_call={response.tool_call is not None}")
                 if self._closed:
                     break
 
@@ -289,7 +293,7 @@ class GeminiLiveSession:
             import traceback
             logger.error(traceback.format_exc())
 
-        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed}, audio_in={self._audio_in_count})")
+        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed}, audio_in={self._audio_in_count}, responses={response_count})")
 
     async def _approval_monitor(self, session):
         """
