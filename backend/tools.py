@@ -334,7 +334,51 @@ class ToolDispatcher:
             "confirmation_sent": True,
         }
 
-    # ── 10. Schedule service ─────────────────────────────────────────────────
+    # ── 10a. Get service info (quote + available times, does NOT book) ──────
+    async def _t_get_service_info(self, args, **ctx):
+        """Get pricing and available time slots for a service — does NOT book."""
+        service_type = args.get("service_type", "consultation")
+        preferred_date = args.get("preferred_date")
+
+        if self.bookings:
+            info = await self.bookings.get_available_slots(service_type, preferred_date)
+            return info
+
+        # Fallback
+        from services.booking_service import SERVICE_TYPES, AVAILABLE_SLOTS
+        svc = SERVICE_TYPES.get(service_type, {})
+        return {
+            "service_type": service_type,
+            "service_name": svc.get("name", service_type),
+            "price": svc.get("price", 0),
+            "duration_minutes": svc.get("duration_minutes", 60),
+            "available_slots": AVAILABLE_SLOTS,
+            "note": "These are available time slots. Tell the customer and ask which they prefer before booking.",
+        }
+
+    # ── 10b. Navigate page (control the website UI) ──────────────────────────
+    async def _t_navigate_page(self, args, **ctx):
+        """Navigate the customer to a page on the website."""
+        page = args.get("page", "home")
+        valid_pages = {"cart", "checkout", "shop", "orders", "support", "home"}
+        if page not in valid_pages:
+            return {"error": f"Unknown page '{page}'. Available: {', '.join(valid_pages)}"}
+
+        page_names = {
+            "cart": "your shopping cart",
+            "checkout": "the checkout page",
+            "shop": "our product catalog",
+            "orders": "your order history",
+            "support": "customer support",
+            "home": "the home page",
+        }
+        return {
+            "success": True,
+            "page": page,
+            "message": f"I've opened {page_names.get(page, page)} for you.",
+        }
+
+    # ── 10c. Schedule service (actually books — requires prior confirmation) ─
     async def _t_schedule_service(self, args, **ctx):
         """Book a consultation, planting, installation, repair, or delivery."""
         cid = ctx.get("customer_id")

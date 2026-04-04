@@ -31,15 +31,15 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-live-2.5-flash-native-audio")
 SHOP_TOOLS = [
     "identify_plant_or_product", "recommend_products", "get_product_details",
     "add_to_cart", "remove_from_cart", "apply_offer",
-    "request_discount_approval", "schedule_service", "send_care_guide",
-    "connect_to_human",
+    "request_discount_approval", "get_service_info", "schedule_service",
+    "send_care_guide", "navigate_page", "connect_to_human",
 ]
 
 SUPPORT_TOOLS = [
     "get_order_status", "process_refund", "identify_plant_or_product",
     "update_support_ticket", "send_follow_up_email", "apply_offer",
-    "request_discount_approval", "schedule_service", "send_care_guide",
-    "connect_to_human",
+    "request_discount_approval", "get_service_info", "schedule_service",
+    "send_care_guide", "navigate_page", "connect_to_human",
 ]
 
 ALL_TOOL_DECLARATIONS = {
@@ -122,6 +122,22 @@ ALL_TOOL_DECLARATIONS = {
             "preferred_date": types.Schema(type=types.Type.STRING, description="Confirmed date"),
             "preferred_time": types.Schema(type=types.Type.STRING, description="Confirmed time slot"),
             "notes": types.Schema(type=types.Type.STRING),
+        }),
+    ),
+    "get_service_info": types.FunctionDeclaration(
+        name="get_service_info",
+        description="Get pricing and available time slots for a service. Use this FIRST when the customer asks about services. This does NOT book anything — it just returns info for you to present. Only call schedule_service AFTER the customer confirms.",
+        parameters=types.Schema(type=types.Type.OBJECT, required=["service_type"], properties={
+            "service_type": types.Schema(type=types.Type.STRING, enum=["consultation", "planting", "installation", "repair", "delivery"]),
+            "preferred_date": types.Schema(type=types.Type.STRING, description="Optional date to check availability"),
+        }),
+    ),
+    "navigate_page": types.FunctionDeclaration(
+        name="navigate_page",
+        description="Navigate the customer to a page on the website. Use when they say 'open my cart', 'go to checkout', 'show me products', 'take me to orders', etc.",
+        parameters=types.Schema(type=types.Type.OBJECT, required=["page"], properties={
+            "page": types.Schema(type=types.Type.STRING, enum=["cart", "checkout", "shop", "orders", "support", "home"],
+                                 description="Which page to navigate to"),
         }),
     ),
     "send_care_guide": types.FunctionDeclaration(
@@ -455,9 +471,23 @@ class GeminiLiveSession:
                     "reason": args.get("reason", ""),
                 })
 
-        # Booking
+        # Service info (available times — NOT a booking)
+        if name == "get_service_info" and status == "success":
+            await self._queue.put({
+                "type": "service_info",
+                "service": result,
+            })
+
+        # Booking confirmed (only from schedule_service, NOT get_service_info)
         if name == "schedule_service" and status == "success" and result.get("success"):
             await self._queue.put({"type": "booking_confirmed", "booking": result})
+
+        # Navigation
+        if name == "navigate_page" and status == "success":
+            await self._queue.put({
+                "type": "navigate",
+                "page": result.get("page", "home"),
+            })
 
         # Handoff
         if name == "connect_to_human" and status == "success" and result.get("success"):

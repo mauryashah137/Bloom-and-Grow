@@ -254,9 +254,34 @@ export function useGeminiSession() {
           store.addActionCard({ id: `disc-r-${ev.request_id}`, type: "discount_status", title: ev.approved ? "Discount approved!" : "Discount not available", message: ev.approved ? `${ev.discount_pct}% discount applied!` : `Unable to offer that discount. ${ev.note || ""}`, discountRequest: { request_id: ev.request_id, discount_pct: ev.discount_pct, reason: ev.note || "", status: ev.approved ? "approved" : "rejected" }, ts: Date.now() / 1000 });
           break;
 
+        case "service_info":
+          // Show available times — NOT a booking confirmation
+          if (ev.service) {
+            const svc = ev.service;
+            const slots = svc.available_slots?.join(", ") || "No slots available";
+            store.addActionCard({
+              id: `svc-info-${Date.now()}`, type: "text",
+              title: svc.service_name || "Service Info",
+              message: `${svc.service_name}: $${svc.price?.toFixed(2) || "Free"}\nAvailable: ${slots}`,
+              ts: Date.now() / 1000,
+            });
+          }
+          break;
+
         case "booking_confirmed":
           store.setLastBooking(ev.booking);
           store.addActionCard({ id: `book-${Date.now()}`, type: "booking", title: "Booking confirmed!", booking: ev.booking, ts: Date.now() / 1000 });
+          break;
+
+        case "navigate":
+          // Navigate to a page on the website
+          if (ev.page) {
+            const routes: Record<string, string> = { cart: "/cart", checkout: "/checkout", shop: "/shop", orders: "/orders", support: "/support", home: "/" };
+            const route = routes[ev.page];
+            if (route && typeof window !== "undefined") {
+              window.location.href = route;
+            }
+          }
           break;
 
         case "order_created":

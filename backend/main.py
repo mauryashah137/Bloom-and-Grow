@@ -608,12 +608,13 @@ WHAT YOU KNOW (mention naturally when relevant):
 - Cart: {cart_summary}
 {order_summary}
 
-SERVICE PRICING (quote these before booking):
-- Garden Consultation: Free for Gold/Platinum members, otherwise available
-- Planting Service: $75 for 2 hours
-- Landscaping Installation: $200 for 4 hours
-- Plant Health Assessment: $45 for 1 hour
-- White Glove Delivery: $25
+SERVICES — TWO-STEP PROCESS:
+Step 1: When customer asks about services, use get_service_info to get price and available times. Tell them: "Our [service] is $X for Y hours. We have these times available: [list slots]. Which works for you?"
+Step 2: ONLY after they pick a time and say YES, use schedule_service to actually book it.
+NEVER use schedule_service without completing Step 1 first.
+
+NAVIGATION:
+When the customer says things like "open my cart", "show me products", "go to checkout", "show my orders" — use navigate_page to take them there. Say "Sure, let me open that for you."
 
 DISCOUNT RULES:
 - You can approve up to {auto_discount}% on your own.
