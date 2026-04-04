@@ -1,8 +1,13 @@
 """
 Gemini Live API session wrapper — full multimodal support.
-Handles bidirectional audio, live video frames, image uploads, tool calling.
-Mode-aware: only exposes relevant tools per mode.
-Tracks journey context for deep personalization.
+Uses the latest google-genai SDK methods:
+  - send_realtime_input() for audio/video/text streaming
+  - send_client_content() for turn-based content (images, context)
+  - send_tool_response() for function call responses
+  - receive() yields LiveServerMessage with server_content and tool_call
+
+Model: gemini-live-2.5-flash-native-audio (production, Vertex AI)
+Audio: PCM 16kHz input, 24kHz output
 """
 import asyncio, base64, logging, os, time
 from typing import AsyncIterator, Optional, TYPE_CHECKING
@@ -20,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-MODEL = "gemini-live-2.5-flash-native-audio"
+MODEL = os.getenv("GEMINI_MODEL", "gemini-live-2.5-flash-native-audio")
 
 # ── Tool declarations ─────────────────────────────────────────────────────────
 SHOP_TOOLS = [
@@ -87,10 +92,10 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "request_discount_approval": types.FunctionDeclaration(
         name="request_discount_approval",
-        description="Request manager approval for a custom discount that exceeds autonomous limits. Auto-approves if within tier limit.",
+        description="Request manager approval for a custom discount that exceeds your autonomous limits. You CANNOT approve large discounts yourself — you must use this tool. The manager will review and may approve, amend, or decline.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["discount_pct", "reason"], properties={
-            "discount_pct": types.Schema(type=types.Type.NUMBER, description="Discount percentage requested"),
-            "reason": types.Schema(type=types.Type.STRING),
+            "discount_pct": types.Schema(type=types.Type.NUMBER, description="Discount percentage requested by the customer"),
+            "reason": types.Schema(type=types.Type.STRING, description="Why the customer is requesting this discount"),
             "product_id": types.Schema(type=types.Type.STRING),
         }),
     ),
@@ -104,7 +109,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "process_refund": types.FunctionDeclaration(
         name="process_refund",
-        description="Process a refund for an order with policy checking. Always confirm with the customer before calling.",
+        description="Process a refund for an order with policy checking. Always confirm with the customer before calling this.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["order_id", "reason"], properties={
             "order_id": types.Schema(type=types.Type.STRING),
             "amount": types.Schema(type=types.Type.NUMBER, description="Partial amount, or omit for full refund"),
@@ -113,7 +118,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "schedule_service": types.FunctionDeclaration(
         name="schedule_service",
-        description="Book a garden consultation, planting service, installation, repair, or delivery appointment. Returns confirmed booking with specialist assignment.",
+        description="Book a garden consultation, planting service, installation, repair, or delivery appointment.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["service_type"], properties={
             "service_type": types.Schema(type=types.Type.STRING, enum=["consultation", "planting", "installation", "repair", "delivery"]),
             "preferred_date": types.Schema(type=types.Type.STRING, description="Preferred date"),
@@ -149,7 +154,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "connect_to_human": types.FunctionDeclaration(
         name="connect_to_human",
-        description="Transfer to a human agent or specialist. Preserves full conversation context including cart, recommendations, and identification results.",
+        description="Transfer to a human agent or specialist. Preserves full conversation context.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["reason"], properties={
             "reason": types.Schema(type=types.Type.STRING),
             "priority": types.Schema(type=types.Type.STRING, enum=["normal", "urgent"]),
@@ -160,9 +165,8 @@ ALL_TOOL_DECLARATIONS = {
 
 
 def get_tools_for_mode(mode: str) -> types.Tool:
-    """Return only the tools relevant for the current mode."""
     tool_names = SHOP_TOOLS if mode == "shop" else SUPPORT_TOOLS
-    declarations = [ALL_TOOL_DECLARATIONS[name] for name in tool_names if name in ALL_TOOL_DECLARATIONS]
+    declarations = [ALL_TOOL_DECLARATIONS[n] for n in tool_names if n in ALL_TOOL_DECLARATIONS]
     return types.Tool(function_declarations=declarations)
 
 
@@ -185,14 +189,12 @@ class GeminiLiveSession:
         self._client      = genai.Client(vertexai=True, project=GCP_PROJECT, location=GCP_LOCATION)
         self._session     = None
         self._queue: asyncio.Queue = asyncio.Queue()
+        self._approval_queue: asyncio.Queue = asyncio.Queue()
         self._closed      = False
         self._last_image  = None
         self._last_vision_result = None
         self._last_recommendations = None
         self._last_discount_state = None
-
-        # Separate queue for manager approval events that need to be injected into Gemini
-        self._approval_queue: asyncio.Queue = asyncio.Queue()
 
         self._connect_task = asyncio.create_task(self._connect())
 
@@ -215,8 +217,8 @@ class GeminiLiveSession:
         try:
             async with self._client.aio.live.connect(model=MODEL, config=config) as session:
                 self._session = session
-                logger.info(f"[{self.session_id}] Gemini Live connected (mode={self.mode})")
-                await self._receive_loop(session)
+                logger.info(f"[{self.session_id}] Gemini Live connected (model={MODEL}, mode={self.mode})")
+                await self._run_session(session)
         except Exception as e:
             logger.exception(f"[{self.session_id}] Gemini error: {e}")
             await self._queue.put({"type": "error", "message": str(e)})
@@ -224,19 +226,64 @@ class GeminiLiveSession:
             self._closed = True
             await self._queue.put(None)
 
-    async def _receive_loop(self, session):
-        # Start approval monitor alongside the main receive loop
-        monitor_task = asyncio.create_task(self._approval_monitor(session))
+    async def _run_session(self, session):
+        """Run receive loop and approval monitor concurrently."""
+        monitor = asyncio.create_task(self._approval_monitor(session))
         try:
-            await self._receive_loop_inner(session)
+            await self._receive_loop(session)
         finally:
-            monitor_task.cancel()
+            monitor.cancel()
+
+    async def _receive_loop(self, session):
+        async for response in session.receive():
+            if self._closed:
+                break
+
+            # ── Audio data from model ────────────────────────────────────
+            if response.data:
+                await self._queue.put({
+                    "type": "audio_chunk",
+                    "data": base64.b64encode(response.data).decode(),
+                })
+
+            # ── Server content: transcriptions ───────────────────────────
+            if response.server_content:
+                sc = response.server_content
+
+                # Model turn parts (may contain inline audio data)
+                if sc.model_turn and sc.model_turn.parts:
+                    for part in sc.model_turn.parts:
+                        if part.inline_data and part.inline_data.data:
+                            await self._queue.put({
+                                "type": "audio_chunk",
+                                "data": base64.b64encode(part.inline_data.data).decode(),
+                            })
+
+                # User transcription
+                if sc.input_transcription and sc.input_transcription.text:
+                    await self._queue.put({
+                        "type": "transcript", "role": "user",
+                        "text": sc.input_transcription.text, "final": True,
+                        "ts": time.time(),
+                    })
+
+                # Agent transcription
+                if sc.output_transcription and sc.output_transcription.text:
+                    await self._queue.put({
+                        "type": "transcript", "role": "agent",
+                        "text": sc.output_transcription.text, "final": True,
+                        "ts": time.time(),
+                    })
+
+            # ── Tool calls ───────────────────────────────────────────────
+            if response.tool_call:
+                for fc in response.tool_call.function_calls:
+                    await self._dispatch_tool(session, fc)
 
     async def _approval_monitor(self, session):
         """
-        Monitors for manager approval decisions that arrive via _approval_queue.
-        When a discount is approved/rejected/amended, injects a system message into
-        the Gemini conversation so the agent can speak about it to the customer.
+        Listens for manager discount decisions.
+        When received, forwards to browser AND injects into Gemini so the agent speaks it.
         """
         while not self._closed:
             try:
@@ -244,14 +291,14 @@ class GeminiLiveSession:
                 if event is None:
                     break
                 if event.get("type") == "discount_resolved":
-                    # Forward event to browser
+                    # Forward to browser
                     await self._queue.put(event)
 
-                    # Also update cart event for the browser
+                    # Update cart for browser
                     cart = await self.cart_manager.get_or_create(self.customer_id)
                     await self._queue.put({"type": "cart_updated", "cart": cart})
 
-                    # Inject a text message into Gemini so the agent speaks the result
+                    # Inject into Gemini so the agent speaks the result
                     approved = event.get("approved", False)
                     pct = event.get("discount_pct", 0)
                     original = event.get("original_pct", pct)
@@ -261,31 +308,26 @@ class GeminiLiveSession:
                     if approved:
                         if amended:
                             inject = (
-                                f"[SYSTEM: The manager has reviewed the discount request. "
-                                f"The customer originally asked for {original}%, but the manager "
-                                f"has approved a {pct}% discount instead. {note}. "
-                                f"The discount has been automatically applied to the cart. "
-                                f"Please inform the customer about this decision warmly.]"
+                                f"[SYSTEM: The manager reviewed the discount request. "
+                                f"Customer asked for {original}%, manager approved {pct}% instead. "
+                                f"{note}. Discount applied to cart. Tell the customer warmly.]"
                             )
                         else:
                             inject = (
-                                f"[SYSTEM: Great news! The manager has approved the {pct}% "
-                                f"discount request. {note}. The discount has been applied to "
-                                f"the cart. Please inform the customer enthusiastically.]"
+                                f"[SYSTEM: Great news! Manager approved the {pct}% discount. "
+                                f"{note}. Applied to cart. Tell the customer enthusiastically.]"
                             )
                     else:
                         inject = (
-                            f"[SYSTEM: The manager has reviewed the {original}% discount request "
-                            f"and was unable to approve it at this time. {note}. "
-                            f"Please let the customer know gently and suggest alternative offers "
-                            f"or available promo codes like SPRING20 for 20% off.]"
+                            f"[SYSTEM: Manager declined the {original}% discount. {note}. "
+                            f"Let the customer know gently and suggest promo code SPRING20 for 20% off.]"
                         )
 
                     if session and not self._closed:
-                        await session.send(input=types.LiveClientContent(
+                        await session.send_client_content(
                             turns=[types.Content(role="user", parts=[types.Part(text=inject)])],
                             turn_complete=True,
-                        ))
+                        )
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
@@ -293,47 +335,19 @@ class GeminiLiveSession:
             except Exception as e:
                 logger.error(f"Approval monitor error: {e}")
 
-    async def _receive_loop_inner(self, session):
-        async for response in session.receive():
-            if self._closed:
-                break
-
-            # Audio output
-            if response.data:
-                await self._queue.put({
-                    "type": "audio_chunk",
-                    "data": base64.b64encode(response.data).decode(),
-                })
-
-            if response.server_content:
-                sc = response.server_content
-                if sc.input_transcription and sc.input_transcription.text:
-                    await self._queue.put({
-                        "type": "transcript", "role": "user",
-                        "text": sc.input_transcription.text, "final": True, "ts": time.time(),
-                    })
-                if sc.output_transcription and sc.output_transcription.text:
-                    await self._queue.put({
-                        "type": "transcript", "role": "agent",
-                        "text": sc.output_transcription.text, "final": True, "ts": time.time(),
-                    })
-
-            if response.tool_call:
-                for fc in response.tool_call.function_calls:
-                    await self._dispatch_tool(session, fc)
-
     async def _dispatch_tool(self, session, fc):
         name    = fc.name
         args    = dict(fc.args) if fc.args else {}
         call_id = fc.id
 
-        # Inject visual context into vision tool
+        # Inject last image into vision tool
         if name == "identify_plant_or_product" and self._last_image:
             args["_image_b64"] = self._last_image["data"]
             args["_mime_type"] = self._last_image["mime"]
 
         await self._queue.put({
-            "type": "tool_call", "tool": name, "args": {k: v for k, v in args.items() if not k.startswith("_")},
+            "type": "tool_call", "tool": name,
+            "args": {k: v for k, v in args.items() if not k.startswith("_")},
             "status": "running", "ts": time.time(),
         })
 
@@ -362,7 +376,7 @@ class GeminiLiveSession:
             "result": result, "status": status, "ts": time.time(),
         })
 
-        # ── Emit typed events based on tool results ──────────────────────────
+        # ── Emit typed events ────────────────────────────────────────────
 
         # Cart updates
         if name in ("add_to_cart", "remove_from_cart", "apply_offer") and status == "success":
@@ -397,7 +411,7 @@ class GeminiLiveSession:
                 "ts": time.time(),
             })
 
-        # Discount pending
+        # Discount
         if name == "request_discount_approval" and status == "success":
             self._last_discount_state = result
             if result.get("auto_approved"):
@@ -406,9 +420,10 @@ class GeminiLiveSession:
                     "request_id": result.get("request_id"),
                     "approved": True,
                     "discount_pct": result.get("discount_pct", 0),
+                    "original_pct": result.get("discount_pct", 0),
+                    "amended": False,
                     "note": "Auto-approved based on your loyalty tier",
                 })
-                # Also update cart
                 cart = await self.cart_manager.get_or_create(self.customer_id)
                 await self._queue.put({"type": "cart_updated", "cart": cart})
             else:
@@ -419,14 +434,11 @@ class GeminiLiveSession:
                     "reason": args.get("reason", ""),
                 })
 
-        # Booking confirmed
+        # Booking
         if name == "schedule_service" and status == "success" and result.get("success"):
-            await self._queue.put({
-                "type": "booking_confirmed",
-                "booking": result,
-            })
+            await self._queue.put({"type": "booking_confirmed", "booking": result})
 
-        # Handoff created
+        # Handoff
         if name == "connect_to_human" and status == "success" and result.get("success"):
             await self._queue.put({
                 "type": "handoff_created",
@@ -436,47 +448,57 @@ class GeminiLiveSession:
                 "specialist_type": result.get("specialist_type"),
             })
 
-        # Send tool response back to Gemini
-        await session.send(input=types.LiveClientToolResponse(function_responses=[
-            types.FunctionResponse(id=call_id, name=name, response={"result": result})
-        ]))
+        # ── Send tool response back to Gemini ────────────────────────────
+        await session.send_tool_response(
+            function_responses=[
+                types.FunctionResponse(id=call_id, name=name, response={"result": result})
+            ]
+        )
+
+    # ── Input methods ────────────────────────────────────────────────────────
 
     async def send_audio(self, b64: str):
+        """Send PCM 16kHz audio chunk from microphone."""
         if self._session and not self._closed:
-            await self._session.send(input=types.LiveClientRealtimeInput(
-                media_chunks=[types.Blob(data=base64.b64decode(b64), mime_type="audio/pcm;rate=16000")]
-            ))
+            await self._session.send_realtime_input(
+                audio=types.Blob(data=base64.b64decode(b64), mime_type="audio/pcm;rate=16000")
+            )
 
     async def send_video_frame(self, b64: str):
-        """Send a live camera frame to Gemini for real-time visual context."""
+        """Send a live camera frame (JPEG) for real-time visual context."""
         if self._session and not self._closed:
             self._last_image = {"data": b64, "mime": "image/jpeg"}
-            await self._session.send(input=types.LiveClientRealtimeInput(
-                media_chunks=[types.Blob(data=base64.b64decode(b64), mime_type="image/jpeg")]
-            ))
+            await self._session.send_realtime_input(
+                video=types.Blob(data=base64.b64decode(b64), mime_type="image/jpeg")
+            )
 
     async def send_image(self, b64: str, mime_type: str = "image/jpeg"):
-        """Send a one-shot uploaded image."""
+        """Send a one-shot uploaded image via turn-based content."""
         if self._session and not self._closed:
             self._last_image = {"data": b64, "mime": mime_type}
-            await self._session.send(input=types.LiveClientContent(
+            await self._session.send_client_content(
                 turns=[types.Content(role="user", parts=[
                     types.Part(inline_data=types.Blob(data=base64.b64decode(b64), mime_type=mime_type)),
                     types.Part(text="I just uploaded an image. Please analyze it."),
                 ])],
                 turn_complete=True,
-            ))
+            )
 
     async def send_text(self, text: str):
+        """Send a text message from the customer."""
         if self._session and not self._closed:
-            await self._session.send(input=types.LiveClientContent(
+            await self._session.send_client_content(
                 turns=[types.Content(role="user", parts=[types.Part(text=text)])],
                 turn_complete=True,
-            ))
+            )
 
     async def interrupt(self):
+        """Signal end of audio stream to flush cached audio."""
         if self._session and not self._closed:
-            await self._session.send(input=types.LiveClientRealtimeInput(media_chunks=[]))
+            try:
+                await self._session.send_realtime_input(audio_stream_end=True)
+            except Exception:
+                pass
 
     async def event_stream(self) -> AsyncIterator[dict]:
         while True:
