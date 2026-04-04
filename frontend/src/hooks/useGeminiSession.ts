@@ -305,15 +305,9 @@ export function useGeminiSession() {
     wsRef.current?.send(JSON.stringify({ type: "text", content: text }));
   }, []);
 
-  useEffect(() => {
-    return () => {
-      stopMic();
-      stopCamera();
-      stopPlayback();
-      try { recCtxRef.current?.close(); } catch {}
-      try { playCtxRef.current?.close(); } catch {}
-    };
-  }, []);
+  // NOTE: No useEffect cleanup — we don't want to disconnect on component re-render.
+  // The connection persists until the user explicitly clicks "end call".
+  // Cleanup happens in disconnect() which is called by the end call button.
 
   return { connect, disconnect, toggleMic, startMic, stopMic, startCamera, stopCamera, sendImage, sendText, stopPlayback };
 }
