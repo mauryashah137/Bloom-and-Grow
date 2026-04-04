@@ -73,6 +73,10 @@ export function useGeminiSession() {
     src.connect(ctx.destination);
 
     const now = ctx.currentTime;
+    // If we've fallen too far behind (>2s), reset to now to avoid delayed playback
+    if (nextPlayTime.current < now - 2) {
+      nextPlayTime.current = now;
+    }
     const startAt = Math.max(nextPlayTime.current, now);
     src.start(startAt);
     nextPlayTime.current = startAt + buf.duration;
@@ -197,6 +201,11 @@ export function useGeminiSession() {
 
         case "audio_chunk":
           playChunk(ev.data);
+          break;
+
+        case "interrupted":
+          // User started speaking — stop agent audio immediately
+          stopPlayback();
           break;
 
         case "transcript":
