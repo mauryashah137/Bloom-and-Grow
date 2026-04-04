@@ -245,87 +245,55 @@ class GeminiLiveSession:
         while not self._closed:
           try:
             turn_count += 1
-            logger.info(f"[{self.session_id}] Waiting for turn #{turn_count}")
             async for response in session.receive():
                 response_count += 1
-                if response_count <= 10:
-                    sc = response.server_content
-                    has_model_audio = False
-                    has_transcript = False
-                    if sc:
-                        if sc.model_turn and sc.model_turn.parts:
-                            for p in sc.model_turn.parts:
-                                if p.inline_data:
-                                    has_model_audio = True
-                        has_transcript = bool((sc.output_transcription and sc.output_transcription.text) or (sc.input_transcription and sc.input_transcription.text))
-                    tc_name = response.tool_call.function_calls[0].name if response.tool_call and response.tool_call.function_calls else None
-                    logger.info(f"[{self.session_id}] Resp#{response_count} T{turn_count}: data={response.data is not None}, model_audio={has_model_audio}, transcript={has_transcript}, tool={tc_name}")
                 if self._closed:
                     break
 
-            # ── Audio data from model ────────────────────────────────────
-            if response_count <= 3 and response.data is not None:
-                logger.info(f"[{self.session_id}] response.data type={type(response.data).__name__}, repr={repr(response.data)[:200]}")
-            if response.data:
-                chunk = {
-                    "type": "audio_chunk",
-                    "data": base64.b64encode(response.data).decode(),
-                }
-                await self._queue.put(chunk)
-                if response_count <= 5:
-                    logger.info(f"[{self.session_id}] QUEUED audio ({len(response.data)}B), qsize={self._queue.qsize()}")
-
-            # Also check model_turn for inline audio
-            if response.server_content and response.server_content.model_turn:
-                for part in response.server_content.model_turn.parts:
-                    if part.inline_data and part.inline_data.data:
-                        chunk = {
-                            "type": "audio_chunk",
-                            "data": base64.b64encode(part.inline_data.data).decode(),
-                        }
-                        await self._queue.put(chunk)
-                        if response_count <= 5:
-                            logger.info(f"[{self.session_id}] QUEUED inline_audio ({len(part.inline_data.data)}B), qsize={self._queue.qsize()}")
-
-            # ── Server content: transcriptions ───────────────────────────
-            if response.server_content:
-                sc = response.server_content
-
-                # Model turn parts (may contain inline audio data)
-                if sc.model_turn and sc.model_turn.parts:
-                    for part in sc.model_turn.parts:
-                        if part.inline_data and part.inline_data.data:
-                            await self._queue.put({
-                                "type": "audio_chunk",
-                                "data": base64.b64encode(part.inline_data.data).decode(),
-                            })
-
-                # User transcription
-                if sc.input_transcription and sc.input_transcription.text:
+                # ── Audio data (response.data) ───────────────────────────
+                if response.data:
                     await self._queue.put({
-                        "type": "transcript", "role": "user",
-                        "text": sc.input_transcription.text, "final": True,
-                        "ts": time.time(),
+                        "type": "audio_chunk",
+                        "data": base64.b64encode(response.data).decode(),
                     })
 
-                # Agent transcription
-                if sc.output_transcription and sc.output_transcription.text:
-                    await self._queue.put({
-                        "type": "transcript", "role": "agent",
-                        "text": sc.output_transcription.text, "final": True,
-                        "ts": time.time(),
-                    })
+                # ── Server content ───────────────────────────────────────
+                if response.server_content:
+                    sc = response.server_content
 
-            # ── Tool calls ───────────────────────────────────────────────
-            if response.tool_call:
-                for fc in response.tool_call.function_calls:
-                    await self._dispatch_tool(session, fc)
+                    # Inline audio in model turn parts
+                    if sc.model_turn and sc.model_turn.parts:
+                        for part in sc.model_turn.parts:
+                            if part.inline_data and part.inline_data.data:
+                                await self._queue.put({
+                                    "type": "audio_chunk",
+                                    "data": base64.b64encode(part.inline_data.data).decode(),
+                                })
+
+                    # User transcription
+                    if sc.input_transcription and sc.input_transcription.text:
+                        await self._queue.put({
+                            "type": "transcript", "role": "user",
+                            "text": sc.input_transcription.text, "final": True,
+                            "ts": time.time(),
+                        })
+
+                    # Agent transcription
+                    if sc.output_transcription and sc.output_transcription.text:
+                        await self._queue.put({
+                            "type": "transcript", "role": "agent",
+                            "text": sc.output_transcription.text, "final": True,
+                            "ts": time.time(),
+                        })
+
+                # ── Tool calls ───────────────────────────────────────────
+                if response.tool_call:
+                    for fc in response.tool_call.function_calls:
+                        await self._dispatch_tool(session, fc)
 
           except Exception as e:
-            logger.error(f"[{self.session_id}] Receive error (turn {turn_count}): {type(e).__name__}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            break  # Exit while loop on error
+            logger.error(f"[{self.session_id}] Receive error: {type(e).__name__}: {e}")
+            break
 
         logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed}, audio_in={self._audio_in_count}, responses={response_count}, turns={turn_count})")
 
