@@ -169,7 +169,7 @@ export function CartDrawer({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {cart.free_shipping_eligible && (
+            {cart?.free_shipping_eligible && (
               <p className="text-xs text-green-600 text-center">🎉 You qualify for free shipping!</p>
             )}
 
