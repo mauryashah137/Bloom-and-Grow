@@ -45,31 +45,31 @@ SUPPORT_TOOLS = [
 ALL_TOOL_DECLARATIONS = {
     "identify_plant_or_product": types.FunctionDeclaration(
         name="identify_plant_or_product",
-        description="Identify a plant, product, or item shown by the customer via camera or uploaded image. Returns real visual identification with name, health assessment, care tips, and matching catalog products.",
+        description="Identify a plant or product the customer is showing via camera or image. Returns identification, health assessment, and matching catalog products. Safe to call anytime the customer shows something.",
         parameters=types.Schema(type=types.Type.OBJECT, properties={
             "context": types.Schema(type=types.Type.STRING, description="What the customer said about what they're showing"),
         }),
     ),
     "recommend_products": types.FunctionDeclaration(
         name="recommend_products",
-        description="Recommend products based on customer needs, preferences, visual identification, and current context. Returns deeply personalized results with reasons.",
+        description="Search for product recommendations. Returns a list of suggestions. IMPORTANT: After getting results, TELL the customer what you found and ASK if they want to add anything. Do NOT auto-add to cart.",
         parameters=types.Schema(type=types.Type.OBJECT, properties={
-            "need": types.Schema(type=types.Type.STRING, description="What the customer needs or is looking for"),
-            "budget_max": types.Schema(type=types.Type.NUMBER, description="Maximum budget in USD"),
-            "category": types.Schema(type=types.Type.STRING, description="Product category like plants, tools, soil, pots, decor"),
+            "need": types.Schema(type=types.Type.STRING, description="What the customer needs"),
+            "budget_max": types.Schema(type=types.Type.NUMBER, description="Max budget in USD"),
+            "category": types.Schema(type=types.Type.STRING, description="Category: plants, tools, soil, pots, decor"),
             "skill_level": types.Schema(type=types.Type.STRING, enum=["beginner", "intermediate", "expert"]),
         }),
     ),
     "get_product_details": types.FunctionDeclaration(
         name="get_product_details",
-        description="Get full details, pricing, availability, reviews, and complementary products for a specific product.",
+        description="Look up details for a specific product including price, availability, and reviews.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_id"], properties={
             "product_id": types.Schema(type=types.Type.STRING),
         }),
     ),
     "add_to_cart": types.FunctionDeclaration(
         name="add_to_cart",
-        description="Add a product to the customer's shopping cart. Triggers real cart update with pricing.",
+        description="Add a product to the cart. ONLY call this AFTER the customer has explicitly said yes to adding it. Never call without customer confirmation.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_id"], properties={
             "product_id": types.Schema(type=types.Type.STRING),
             "qty": types.Schema(type=types.Type.INTEGER, description="Quantity, default 1"),
@@ -77,31 +77,29 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "remove_from_cart": types.FunctionDeclaration(
         name="remove_from_cart",
-        description="Remove a product from the customer's cart.",
+        description="Remove a product from the cart. Only call after the customer confirms they want it removed.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_id"], properties={
             "product_id": types.Schema(type=types.Type.STRING),
         }),
     ),
     "apply_offer": types.FunctionDeclaration(
         name="apply_offer",
-        description="Apply a promo code, discount, or loyalty reward to the cart. Validates against customer tier and order minimum.",
+        description="Apply a promo code to the cart. Only call when the customer provides a specific code.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["offer_code"], properties={
             "offer_code": types.Schema(type=types.Type.STRING),
-            "reason": types.Schema(type=types.Type.STRING, description="Why the offer is being applied"),
         }),
     ),
     "request_discount_approval": types.FunctionDeclaration(
         name="request_discount_approval",
-        description="Request manager approval for a custom discount that exceeds your autonomous limits. You CANNOT approve large discounts yourself — you must use this tool. The manager will review and may approve, amend, or decline.",
+        description="Send a discount request to the manager for approval. Use when the customer asks for a discount above your authorized limit. Tell the customer you are checking with your supervisor and wait for the result.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["discount_pct", "reason"], properties={
-            "discount_pct": types.Schema(type=types.Type.NUMBER, description="Discount percentage requested by the customer"),
-            "reason": types.Schema(type=types.Type.STRING, description="Why the customer is requesting this discount"),
-            "product_id": types.Schema(type=types.Type.STRING),
+            "discount_pct": types.Schema(type=types.Type.NUMBER, description="Discount percentage"),
+            "reason": types.Schema(type=types.Type.STRING, description="Why the customer wants this discount"),
         }),
     ),
     "get_order_status": types.FunctionDeclaration(
         name="get_order_status",
-        description="Look up an order by order ID or find the customer's recent orders. Returns real order data with tracking info.",
+        description="Look up order status by order ID, or show recent orders if no ID is given.",
         parameters=types.Schema(type=types.Type.OBJECT, properties={
             "order_id": types.Schema(type=types.Type.STRING),
             "show_recent": types.Schema(type=types.Type.BOOLEAN, description="If true, return recent orders"),
@@ -109,34 +107,33 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "process_refund": types.FunctionDeclaration(
         name="process_refund",
-        description="Process a refund for an order with policy checking. Always confirm with the customer before calling this.",
+        description="Process a refund. CRITICAL: You MUST get explicit verbal confirmation from the customer BEFORE calling this. Tell them the amount first and wait for 'yes'.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["order_id", "reason"], properties={
             "order_id": types.Schema(type=types.Type.STRING),
-            "amount": types.Schema(type=types.Type.NUMBER, description="Partial amount, or omit for full refund"),
+            "amount": types.Schema(type=types.Type.NUMBER, description="Refund amount, or omit for full refund"),
             "reason": types.Schema(type=types.Type.STRING),
         }),
     ),
     "schedule_service": types.FunctionDeclaration(
         name="schedule_service",
-        description="Book a garden consultation, planting service, installation, repair, or delivery appointment.",
+        description="Book a service appointment. CRITICAL: Before calling this, you MUST have: 1) Told the customer the price, 2) Discussed the date and time, 3) Gotten explicit 'yes' confirmation. Never book without all three.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["service_type"], properties={
             "service_type": types.Schema(type=types.Type.STRING, enum=["consultation", "planting", "installation", "repair", "delivery"]),
-            "preferred_date": types.Schema(type=types.Type.STRING, description="Preferred date"),
-            "preferred_time": types.Schema(type=types.Type.STRING, description="Preferred time slot"),
+            "preferred_date": types.Schema(type=types.Type.STRING, description="Confirmed date"),
+            "preferred_time": types.Schema(type=types.Type.STRING, description="Confirmed time slot"),
             "notes": types.Schema(type=types.Type.STRING),
         }),
     ),
     "send_care_guide": types.FunctionDeclaration(
         name="send_care_guide",
-        description="Email a personalized care guide for a plant or product to the customer.",
+        description="Email care instructions for a plant or product. Ask the customer if they would like this before sending.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_name"], properties={
             "product_name": types.Schema(type=types.Type.STRING),
-            "product_id": types.Schema(type=types.Type.STRING),
         }),
     ),
     "update_support_ticket": types.FunctionDeclaration(
         name="update_support_ticket",
-        description="Create or update a support case.",
+        description="Create or update a support ticket.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["subject", "description", "priority"], properties={
             "ticket_id": types.Schema(type=types.Type.STRING),
             "subject": types.Schema(type=types.Type.STRING),
@@ -146,7 +143,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "send_follow_up_email": types.FunctionDeclaration(
         name="send_follow_up_email",
-        description="Send a follow-up email summarizing what was resolved or purchased.",
+        description="Send a follow-up email to the customer. Ask before sending.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["subject", "body"], properties={
             "subject": types.Schema(type=types.Type.STRING),
             "body": types.Schema(type=types.Type.STRING),
@@ -154,7 +151,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "connect_to_human": types.FunctionDeclaration(
         name="connect_to_human",
-        description="Transfer to a human agent or specialist. Preserves full conversation context.",
+        description="Transfer to a human specialist. Tell the customer you are transferring them and why.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["reason"], properties={
             "reason": types.Schema(type=types.Type.STRING),
             "priority": types.Schema(type=types.Type.STRING, enum=["normal", "urgent"]),
