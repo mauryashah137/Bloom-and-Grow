@@ -264,8 +264,9 @@ class GeminiLiveSession:
                     break
 
             # ── Audio data from model ────────────────────────────────────
-            has_data = response.data is not None and len(response.data) > 0 if response.data else False
-            if has_data:
+            if response_count <= 3 and response.data is not None:
+                logger.info(f"[{self.session_id}] response.data type={type(response.data).__name__}, repr={repr(response.data)[:200]}")
+            if response.data:
                 chunk = {
                     "type": "audio_chunk",
                     "data": base64.b64encode(response.data).decode(),
