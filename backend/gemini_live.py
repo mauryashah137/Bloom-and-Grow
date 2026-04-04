@@ -239,11 +239,17 @@ class GeminiLiveSession:
     async def _receive_loop(self, session):
         logger.info(f"[{self.session_id}] Starting receive loop")
         response_count = 0
-        try:
+        turn_count = 0
+        # CRITICAL: session.receive() yields responses for ONE model turn then ends.
+        # We must loop and call receive() again to keep the conversation going.
+        while not self._closed:
+          try:
+            turn_count += 1
+            logger.info(f"[{self.session_id}] Waiting for turn #{turn_count}")
             async for response in session.receive():
                 response_count += 1
-                if response_count <= 3:
-                    logger.info(f"[{self.session_id}] Response #{response_count}: data={response.data is not None}, server_content={response.server_content is not None}, tool_call={response.tool_call is not None}")
+                if response_count <= 5:
+                    logger.info(f"[{self.session_id}] Response #{response_count} (turn {turn_count}): data={response.data is not None}, sc={response.server_content is not None}, tc={response.tool_call is not None}")
                 if self._closed:
                     break
 
@@ -288,12 +294,13 @@ class GeminiLiveSession:
                 for fc in response.tool_call.function_calls:
                     await self._dispatch_tool(session, fc)
 
-        except Exception as e:
-            logger.error(f"[{self.session_id}] Receive loop error: {type(e).__name__}: {e}")
+          except Exception as e:
+            logger.error(f"[{self.session_id}] Receive error (turn {turn_count}): {type(e).__name__}: {e}")
             import traceback
             logger.error(traceback.format_exc())
+            break  # Exit while loop on error
 
-        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed}, audio_in={self._audio_in_count}, responses={response_count})")
+        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed}, audio_in={self._audio_in_count}, responses={response_count}, turns={turn_count})")
 
     async def _approval_monitor(self, session):
         """
