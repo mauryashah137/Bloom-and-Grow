@@ -195,8 +195,11 @@ async def ws_endpoint(ws: WebSocket):
 
 
 async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str):
+    """Relay messages between browser WebSocket and Gemini Live session."""
+    stop_event = asyncio.Event()
+
     async def browser_to_gemini():
-        while True:
+        while not stop_event.is_set():
             try:
                 raw = await ws.receive_text()
                 msg = json.loads(raw)
@@ -214,11 +217,15 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
             except WebSocketDisconnect:
                 break
             except Exception as e:
-                logger.error(f"b→g error: {e}")
+                if "1000" not in str(e):  # Ignore normal close codes
+                    logger.error(f"b→g error: {e}")
                 break
+        stop_event.set()
 
     async def gemini_to_browser():
         async for event in gemini.event_stream():
+            if stop_event.is_set():
+                break
             try:
                 await ws.send_json(event)
 
@@ -252,10 +259,17 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
             except WebSocketDisconnect:
                 break
             except Exception as e:
-                logger.error(f"g→b error: {e}")
+                if "1000" not in str(e):
+                    logger.error(f"g→b error: {e}")
                 break
+        stop_event.set()
 
-    await asyncio.gather(browser_to_gemini(), gemini_to_browser())
+    # Run both directions concurrently, stop when either ends
+    tasks = [asyncio.create_task(browser_to_gemini()), asyncio.create_task(gemini_to_browser())]
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    stop_event.set()
+    for t in tasks:
+        t.cancel()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
