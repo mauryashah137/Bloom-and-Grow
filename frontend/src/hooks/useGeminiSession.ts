@@ -46,9 +46,20 @@ export function useGeminiSession() {
   }, []);
 
   // ── Play audio chunk — sends PCM data to ring buffer worklet ──────────
-  const playChunk = useCallback((b64: string) => {
+  const audioChunkCount = useRef(0);
+
+  const playChunk = useCallback(async (b64: string) => {
+    // Ensure AudioContext is resumed (browsers suspend until user gesture)
+    const ctx = playCtxRef.current;
+    if (ctx && ctx.state === "suspended") {
+      try { await ctx.resume(); } catch {}
+    }
+
     const player = playerRef.current;
-    if (!player) return;
+    if (!player) {
+      console.warn("[Audio] No player node — playback not initialized");
+      return;
+    }
 
     // Decode base64 to ArrayBuffer
     const binaryStr = atob(b64);
@@ -58,6 +69,11 @@ export function useGeminiSession() {
 
     // Send raw PCM bytes to the ring buffer worklet
     player.port.postMessage(bytes.buffer);
+
+    audioChunkCount.current++;
+    if (audioChunkCount.current <= 3) {
+      console.log(`[Audio] Chunk #${audioChunkCount.current}: ${len} bytes, ctx.state=${ctx?.state}`);
+    }
 
     // Mark as speaking
     if (!speakingRef.current) {
@@ -163,6 +179,7 @@ export function useGeminiSession() {
     store.setSessionError(null);
     store.clearActionCards();
     await ensurePlayback();
+    console.log(`[Connect] Playback ready: ctx.state=${playCtxRef.current?.state}, player=${!!playerRef.current}`);
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
