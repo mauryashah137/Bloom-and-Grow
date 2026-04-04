@@ -196,6 +196,7 @@ class GeminiLiveSession:
         self._last_recommendations = None
         self._last_discount_state = None
 
+        self._audio_in_count = 0
         self._connect_task = asyncio.create_task(self._connect())
 
     async def _connect(self):
@@ -235,9 +236,11 @@ class GeminiLiveSession:
             monitor.cancel()
 
     async def _receive_loop(self, session):
-        async for response in session.receive():
-            if self._closed:
-                break
+        logger.info(f"[{self.session_id}] Starting receive loop")
+        try:
+            async for response in session.receive():
+                if self._closed:
+                    break
 
             # ── Audio data from model ────────────────────────────────────
             if response.data:
@@ -279,6 +282,11 @@ class GeminiLiveSession:
             if response.tool_call:
                 for fc in response.tool_call.function_calls:
                     await self._dispatch_tool(session, fc)
+
+        except Exception as e:
+            logger.error(f"[{self.session_id}] Receive loop error: {e}")
+
+        logger.info(f"[{self.session_id}] Receive loop ended (closed={self._closed})")
 
     async def _approval_monitor(self, session):
         """
@@ -460,6 +468,9 @@ class GeminiLiveSession:
     async def send_audio(self, b64: str):
         """Send PCM 16kHz audio chunk from microphone."""
         if self._session and not self._closed:
+            self._audio_in_count += 1
+            if self._audio_in_count <= 3 or self._audio_in_count % 100 == 0:
+                logger.info(f"[{self.session_id}] Audio in #{self._audio_in_count} ({len(b64)} b64 chars)")
             await self._session.send_realtime_input(
                 audio=types.Blob(data=base64.b64decode(b64), mime_type="audio/pcm;rate=16000")
             )
