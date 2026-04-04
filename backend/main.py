@@ -237,10 +237,16 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
         stop_event.set()
 
     async def gemini_to_browser():
+        g2b_count = 0
+        logger.info(f"[{session_id}] g→b relay started")
         async for event in gemini.event_stream():
             if stop_event.is_set():
                 break
             try:
+                g2b_count += 1
+                et = event.get("type", "?")
+                if g2b_count <= 5 or et != "audio_chunk":
+                    logger.info(f"[{session_id}] g→b #{g2b_count}: {et}")
                 await ws.send_json(event)
 
                 # Persist events
