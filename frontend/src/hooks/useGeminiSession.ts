@@ -145,6 +145,7 @@ export function useGeminiSession() {
 
     ws.onmessage = (e) => {
       const ev = JSON.parse(e.data);
+      if (ev.type === "ping") return; // Keepalive — ignore
       switch (ev.type) {
         case "session_started":
           store.setSessionId(ev.session_id);

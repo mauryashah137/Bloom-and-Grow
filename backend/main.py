@@ -198,6 +198,16 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
     """Relay messages between browser WebSocket and Gemini Live session."""
     stop_event = asyncio.Event()
 
+    async def keepalive():
+        """Send periodic pings to keep WebSocket alive through load balancers."""
+        while not stop_event.is_set():
+            try:
+                await asyncio.sleep(15)
+                if not stop_event.is_set():
+                    await ws.send_json({"type": "ping"})
+            except Exception:
+                break
+
     async def browser_to_gemini():
         while not stop_event.is_set():
             try:
@@ -264,10 +274,12 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
                 break
         stop_event.set()
 
-    # Run both directions concurrently, stop when either ends
+    # Run relay + keepalive concurrently, stop when relay ends
+    ka = asyncio.create_task(keepalive())
     tasks = [asyncio.create_task(browser_to_gemini()), asyncio.create_task(gemini_to_browser())]
     await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     stop_event.set()
+    ka.cancel()
     for t in tasks:
         t.cancel()
 
