@@ -248,8 +248,18 @@ class GeminiLiveSession:
             logger.info(f"[{self.session_id}] Waiting for turn #{turn_count}")
             async for response in session.receive():
                 response_count += 1
-                if response_count <= 5:
-                    logger.info(f"[{self.session_id}] Response #{response_count} (turn {turn_count}): data={response.data is not None}, sc={response.server_content is not None}, tc={response.tool_call is not None}")
+                if response_count <= 10:
+                    sc = response.server_content
+                    has_model_audio = False
+                    has_transcript = False
+                    if sc:
+                        if sc.model_turn and sc.model_turn.parts:
+                            for p in sc.model_turn.parts:
+                                if p.inline_data:
+                                    has_model_audio = True
+                        has_transcript = bool((sc.output_transcription and sc.output_transcription.text) or (sc.input_transcription and sc.input_transcription.text))
+                    tc_name = response.tool_call.function_calls[0].name if response.tool_call and response.tool_call.function_calls else None
+                    logger.info(f"[{self.session_id}] Resp#{response_count} T{turn_count}: data={response.data is not None}, model_audio={has_model_audio}, transcript={has_transcript}, tool={tc_name}")
                 if self._closed:
                     break
 
