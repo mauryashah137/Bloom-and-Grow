@@ -264,14 +264,27 @@ class GeminiLiveSession:
                     break
 
             # ── Audio data from model ────────────────────────────────────
-            if response.data:
+            has_data = response.data is not None and len(response.data) > 0 if response.data else False
+            if has_data:
                 chunk = {
                     "type": "audio_chunk",
                     "data": base64.b64encode(response.data).decode(),
                 }
                 await self._queue.put(chunk)
-                if self._audio_in_count == 0 and response_count <= 3:
-                    logger.info(f"[{self.session_id}] Queued audio_chunk, qsize={self._queue.qsize()}")
+                if response_count <= 5:
+                    logger.info(f"[{self.session_id}] QUEUED audio ({len(response.data)}B), qsize={self._queue.qsize()}")
+
+            # Also check model_turn for inline audio
+            if response.server_content and response.server_content.model_turn:
+                for part in response.server_content.model_turn.parts:
+                    if part.inline_data and part.inline_data.data:
+                        chunk = {
+                            "type": "audio_chunk",
+                            "data": base64.b64encode(part.inline_data.data).decode(),
+                        }
+                        await self._queue.put(chunk)
+                        if response_count <= 5:
+                            logger.info(f"[{self.session_id}] QUEUED inline_audio ({len(part.inline_data.data)}B), qsize={self._queue.qsize()}")
 
             # ── Server content: transcriptions ───────────────────────────
             if response.server_content:
