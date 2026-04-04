@@ -1,9 +1,9 @@
 """
 Gemini Live API session wrapper — full multimodal support.
-Uses the latest google-genai SDK methods:
-  - send_realtime_input() for audio/video/text streaming
-  - send_client_content() for turn-based content (images, context)
-  - send_tool_response() for function call responses
+Uses the google-genai SDK session.send() method with:
+  - LiveClientRealtimeInput for audio/video streaming
+  - LiveClientContent for turn-based content (images, text)
+  - LiveClientToolResponse for function call responses
   - receive() yields LiveServerMessage with server_content and tool_call
 
 Model: gemini-live-2.5-flash-native-audio (production, Vertex AI)
@@ -339,10 +339,10 @@ class GeminiLiveSession:
                         )
 
                     if session and not self._closed:
-                        await session.send_client_content(
+                        await session.send(input=types.LiveClientContent(
                             turns=[types.Content(role="user", parts=[types.Part(text=inject)])],
                             turn_complete=True,
-                        )
+                        ))
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
@@ -464,11 +464,9 @@ class GeminiLiveSession:
             })
 
         # ── Send tool response back to Gemini ────────────────────────────
-        await session.send_tool_response(
-            function_responses=[
-                types.FunctionResponse(id=call_id, name=name, response={"result": result})
-            ]
-        )
+        await session.send(input=types.LiveClientToolResponse(function_responses=[
+            types.FunctionResponse(id=call_id, name=name, response={"result": result})
+        ]))
 
     # ── Input methods ────────────────────────────────────────────────────────
 
@@ -478,7 +476,7 @@ class GeminiLiveSession:
         logger.info(f"[{self.session_id}] Audio sample rate set to {rate}Hz")
 
     async def send_audio(self, b64: str):
-        """Send PCM audio chunk from microphone at the client's actual sample rate."""
+        """Send PCM audio chunk using the legacy send() method which is proven to work."""
         if self._session and not self._closed:
             self._audio_in_count += 1
             raw = base64.b64decode(b64)
@@ -490,11 +488,16 @@ class GeminiLiveSession:
                     max_val = max(abs(s) for s in samples[:100])
                 else:
                     max_val = 0
-                logger.info(f"[{self.session_id}] Audio #{self._audio_in_count}: {len(raw)}B, {n_samples} samples, max_amp={max_val}, rate={self._audio_sample_rate}")
+                logger.info(f"[{self.session_id}] Audio #{self._audio_in_count}: {len(raw)}B, {n_samples}samp, amp={max_val}, rate={self._audio_sample_rate}")
             try:
-                mime = f"audio/pcm;rate={self._audio_sample_rate}"
-                await self._session.send_realtime_input(
-                    audio=types.Blob(data=raw, mime_type=mime)
+                # Use the proven send() method with LiveClientRealtimeInput
+                await self._session.send(
+                    input=types.LiveClientRealtimeInput(
+                        media_chunks=[types.Blob(
+                            data=raw,
+                            mime_type=f"audio/pcm;rate={self._audio_sample_rate}"
+                        )]
+                    )
                 )
             except Exception as e:
                 logger.error(f"[{self.session_id}] send_audio error: {e}")
@@ -504,35 +507,35 @@ class GeminiLiveSession:
         """Send a live camera frame (JPEG) for real-time visual context."""
         if self._session and not self._closed:
             self._last_image = {"data": b64, "mime": "image/jpeg"}
-            await self._session.send_realtime_input(
-                video=types.Blob(data=base64.b64decode(b64), mime_type="image/jpeg")
-            )
+            await self._session.send(input=types.LiveClientRealtimeInput(
+                media_chunks=[types.Blob(data=base64.b64decode(b64), mime_type="image/jpeg")]
+            ))
 
     async def send_image(self, b64: str, mime_type: str = "image/jpeg"):
-        """Send a one-shot uploaded image via turn-based content."""
+        """Send a one-shot uploaded image."""
         if self._session and not self._closed:
             self._last_image = {"data": b64, "mime": mime_type}
-            await self._session.send_client_content(
+            await self._session.send(input=types.LiveClientContent(
                 turns=[types.Content(role="user", parts=[
                     types.Part(inline_data=types.Blob(data=base64.b64decode(b64), mime_type=mime_type)),
                     types.Part(text="I just uploaded an image. Please analyze it."),
                 ])],
                 turn_complete=True,
-            )
+            ))
 
     async def send_text(self, text: str):
         """Send a text message from the customer."""
         if self._session and not self._closed:
-            await self._session.send_client_content(
+            await self._session.send(input=types.LiveClientContent(
                 turns=[types.Content(role="user", parts=[types.Part(text=text)])],
                 turn_complete=True,
-            )
+            ))
 
     async def interrupt(self):
-        """Signal end of audio stream to flush cached audio."""
+        """Signal end of audio stream."""
         if self._session and not self._closed:
             try:
-                await self._session.send_realtime_input(audio_stream_end=True)
+                await self._session.send(input=types.LiveClientRealtimeInput(media_chunks=[]))
             except Exception:
                 pass
 
