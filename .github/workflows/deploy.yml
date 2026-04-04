@@ -1,0 +1,45 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+env:
+  REGION: us-central1
+  SERVICE: gemini-cx-agent-backend
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+      - name: Build & push
+        working-directory: backend
+        run: |
+          IMG="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gemini-cx-agent-backend/backend:${{ github.sha }}"
+          docker build -t "$IMG" . && docker push "$IMG"
+          docker tag "$IMG" "${IMG%:*}:latest" && docker push "${IMG%:*}:latest"
+      - name: Deploy
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gemini-cx-agent-backend/backend:${{ github.sha }}" \
+            --region ${{ env.REGION }} --allow-unauthenticated \
+            --set-env-vars "GCP_PROJECT=${{ secrets.GCP_PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}"
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g vercel
+      - working-directory: frontend
+        run: vercel deploy --prod --token ${{ secrets.VERCEL_TOKEN }} --env NEXT_PUBLIC_WS_URL=${{ secrets.NEXT_PUBLIC_WS_URL }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
