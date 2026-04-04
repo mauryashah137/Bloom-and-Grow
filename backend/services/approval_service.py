@@ -38,6 +38,14 @@ class ApprovalService:
         customer_tier: str = "Standard",
     ) -> dict:
         """Create a discount approval request."""
+        # Validate discount range
+        if discount_pct <= 0:
+            return {"error": "Discount must be greater than 0%."}
+        if discount_pct > 100:
+            return {"error": "Discount cannot exceed 100%."}
+        if not reason or not reason.strip():
+            return {"error": "Please provide a reason for the discount."}
+
         # Check if policy allows auto-approval
         if self._policy:
             auto_limit = self._policy.get_autonomous_discount_limit(customer_tier)

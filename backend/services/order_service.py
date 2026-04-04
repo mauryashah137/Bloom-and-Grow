@@ -78,12 +78,19 @@ _MEMORY.update({f"order:{k}": v for k, v in SEED_ORDERS.items()})
 class OrderService:
     async def create_order(self, customer_id: str, cart: dict, shipping: dict, payment: dict) -> dict:
         """Create an order from a cart."""
+        # Validate cart has items
+        if not cart.get("items"):
+            return {"error": "Cannot create order — cart is empty."}
+        if not customer_id:
+            return {"error": "Customer ID is required."}
+
         order_id = f"ORD-{uuid.uuid4().hex[:5].upper()}"
-        subtotal = cart.get("subtotal", 0)
-        discount_pct = cart.get("discount_pct", 0)
+        subtotal = max(cart.get("subtotal", 0), 0)  # Ensure non-negative
+        discount_pct = min(max(cart.get("discount_pct", 0), 0), 100)  # Clamp 0-100
         tax = round(subtotal * 0.084, 2)
         discount_amount = round(subtotal * discount_pct / 100, 2)
-        total = round(subtotal - discount_amount + tax + shipping.get("cost", 0), 2)
+        shipping_cost = max(shipping.get("cost", 0), 0)  # Ensure non-negative
+        total = round(max(subtotal - discount_amount + tax + shipping_cost, 0), 2)  # Ensure non-negative
 
         order = {
             "order_id": order_id,

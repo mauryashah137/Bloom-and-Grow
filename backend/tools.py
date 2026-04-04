@@ -160,12 +160,26 @@ class ToolDispatcher:
     async def _t_add_to_cart(self, args, **ctx):
         """Add a product to the customer's shopping cart."""
         cid = ctx.get("customer_id")
+        pid = args.get("product_id")
+        qty = args.get("qty", 1)
+
+        # Validate product exists
+        if pid and self.catalog:
+            product = await self.catalog.get(pid)
+            if not product:
+                return {"error": f"Product '{pid}' not found in our catalog. Can I help you find the right product?"}
+            # Check stock
+            stock = product.get("stock", 0)
+            if stock <= 0:
+                return {"error": f"Sorry, {product['name']} is currently out of stock."}
+            if qty > stock:
+                return {"error": f"We only have {stock} units of {product['name']} in stock. Would you like to add {stock} instead?"}
+
         if self.cart:
-            return await self.cart.add_item(cid, args["product_id"], args.get("qty", 1))
-        # Fallback
+            return await self.cart.add_item(cid, pid, qty)
         cm = ctx.get("cart_manager")
         if cm:
-            return await cm.add_item(cid, args["product_id"], args.get("qty", 1))
+            return await cm.add_item(cid, pid, qty)
         return {"error": "Cart service unavailable"}
 
     # ── 5. Remove from cart ──────────────────────────────────────────────────
