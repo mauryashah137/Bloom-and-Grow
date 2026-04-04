@@ -1,7 +1,10 @@
 name: Deploy
+# Disabled — using manual Cloud Run deploy + Vercel Git integration instead
+# To re-enable, uncomment the trigger and set up GitHub secrets:
+#   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT, GCP_PROJECT_ID,
+#   ALLOWED_ORIGINS, VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, NEXT_PUBLIC_WS_URL
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # Manual trigger only
 
 env:
   REGION: us-central1
