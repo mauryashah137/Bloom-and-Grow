@@ -473,7 +473,11 @@ class GeminiLiveSession:
             self._audio_in_count += 1
             raw = base64.b64decode(b64)
             if self._audio_in_count <= 5 or self._audio_in_count % 200 == 0:
-                logger.info(f"[{self.session_id}] Audio in #{self._audio_in_count} ({len(raw)} bytes, {len(b64)} b64)")
+                # Check if audio has actual content (not silence)
+                import struct
+                samples = struct.unpack(f"<{len(raw)//2}h", raw)
+                max_val = max(abs(s) for s in samples[:100]) if samples else 0
+                logger.info(f"[{self.session_id}] Audio in #{self._audio_in_count} ({len(raw)}B, max_amplitude={max_val})")
             try:
                 await self._session.send_realtime_input(
                     audio=types.Blob(data=raw, mime_type="audio/pcm;rate=16000")
