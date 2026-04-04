@@ -265,10 +265,13 @@ class GeminiLiveSession:
 
             # ── Audio data from model ────────────────────────────────────
             if response.data:
-                await self._queue.put({
+                chunk = {
                     "type": "audio_chunk",
                     "data": base64.b64encode(response.data).decode(),
-                })
+                }
+                await self._queue.put(chunk)
+                if self._audio_in_count == 0 and response_count <= 3:
+                    logger.info(f"[{self.session_id}] Queued audio_chunk, qsize={self._queue.qsize()}")
 
             # ── Server content: transcriptions ───────────────────────────
             if response.server_content:
@@ -557,9 +560,11 @@ class GeminiLiveSession:
                 pass
 
     async def event_stream(self) -> AsyncIterator[dict]:
+        logger.info(f"[{self.session_id}] event_stream started, queue size={self._queue.qsize()}")
         while True:
             event = await self._queue.get()
             if event is None:
+                logger.info(f"[{self.session_id}] event_stream got None, ending")
                 break
             yield event
 
