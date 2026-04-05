@@ -50,15 +50,8 @@ export function useGeminiSession() {
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    // Deduplicate — skip if we've seen this exact chunk recently
-    const chunkKey = b64.slice(0, 100); // Use first 100 chars as fingerprint
-    if (chunkKey === lastChunkId.current || recentChunks.current.has(chunkKey)) return;
-    recentChunks.current.add(chunkKey);
-    // Keep set small — only track last 20 chunks
-    if (recentChunks.current.size > 20) {
-      const first = recentChunks.current.values().next().value;
-      if (first) recentChunks.current.delete(first);
-    }
+    // Simple dedup — skip if identical to previous chunk
+    if (b64 === lastChunkId.current) return;
     lastChunkId.current = b64;
 
     // Decode base64 → Int16 → Float32
