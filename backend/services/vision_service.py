@@ -102,19 +102,20 @@ Customer preferences:
 - Garden type: {preferences.get('garden_type', 'unknown')}
 - Budget range: {preferences.get('budget_range', 'unknown')}
 """
-        return f"""Analyze this image for a garden and home retail store called Bloom & Grow.
+        return f"""You are a vision system for Bloom & Grow, a garden and home retail store. ONLY identify plants, flowers, garden tools, soil, pots, fertilizers, and garden-related products.
 
 {f'Customer said: "{context}"' if context else ''}
 {pref_text}
 
-IMPORTANT EDGE CASES TO HANDLE:
+CRITICAL RULES:
+- If you see a HUMAN FACE or PERSON: set candidates to [{{"name":"Person detected","confidence":1.0,"category":"not_garden_related","description":"Please show me a plant, flower, or garden product instead."}}] and set next_question to "Could you show me a plant or garden product? I can help identify it!"
+- If you see FURNITURE, ELECTRONICS, FOOD, or other non-garden items: set category to "not_garden_related" and ask to see a plant/garden item
+- ONLY provide detailed identification for: plants, flowers, trees, shrubs, soil, fertilizer, pots, garden tools, seeds, pest control products, garden decor
 - If the image is blurry, dark, or unclear: set confidence very low and ask for a clearer photo
-- If you see a non-plant object (person, furniture, etc.): identify it but set category to "other"
 - If you see a DAMAGED product (broken pot, torn bag, dead plant): note the damage in health_assessment
 - If you see MULTIPLE plants: identify each one in separate candidates
 - If you see PESTS (bugs, webs, spots on leaves): set issue_detected appropriately
 - If you see a PRODUCT LABEL or packaging: read the label and identify the product
-- If the image shows nothing relevant: set candidates to empty and suggest the customer try again
 
 Return a JSON object with this exact structure:
 {{

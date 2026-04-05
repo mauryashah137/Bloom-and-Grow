@@ -86,9 +86,16 @@ class ToolDispatcher:
                 "catalog_matches": [],
             }
 
+        # Check if non-garden item detected — redirect the customer
+        candidates = result.get("candidates", [])
+        if candidates and candidates[0].get("category") == "not_garden_related":
+            result["not_garden_related"] = True
+            result["redirect_message"] = "I can see that's not a plant or garden product. Could you show me a plant, flower, or garden item? I'm great at identifying those!"
+            return result
+
         # Enrich with catalog matches if catalog service available
-        if self.catalog and result.get("candidates"):
-            matches = await self.catalog.match_from_vision(result["candidates"])
+        if self.catalog and candidates:
+            matches = await self.catalog.match_from_vision(candidates)
             result["catalog_matches"] = matches
 
         # Compare with current cart items — tell the agent what's compatible

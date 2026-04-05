@@ -8,7 +8,7 @@ class PCMRecorderProcessor extends AudioWorkletProcessor {
     super();
     // Buffer size targets ~100ms. Actual size set on first process() call
     // based on sampleRate (which may be 16000, 44100, or 48000).
-    this._targetMs = 200; // 200ms chunks for better speech recognition
+    this._targetMs = 100; // 100ms chunks — balance between latency and recognition
     this._bufferSize = 0;
     this._buffer = null;
     this._offset = 0;
