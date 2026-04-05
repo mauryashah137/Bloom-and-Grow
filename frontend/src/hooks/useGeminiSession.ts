@@ -91,14 +91,10 @@ export function useGeminiSession() {
   }, [store]);
 
   const stopPlayback = useCallback(() => {
-    // Close and recreate AudioContext — only way to truly stop all scheduled audio
-    if (playCtxRef.current && playCtxRef.current.state !== "closed") {
-      try { playCtxRef.current.close(); } catch {}
+    // Reset play schedule to current time — skips any queued audio
+    if (playCtxRef.current) {
+      nextPlayTime.current = playCtxRef.current.currentTime + 10; // Jump ahead to skip queued buffers
     }
-    // Recreate immediately for next audio
-    const ctx = new AudioContext({ sampleRate: 24000 });
-    playCtxRef.current = ctx;
-    nextPlayTime.current = ctx.currentTime;
     lastChunkId.current = "";
     recentChunks.current.clear();
     store.setAgentSpeaking(false);
