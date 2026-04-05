@@ -259,12 +259,11 @@ export function useGeminiSession() {
           break;
 
         case "navigate":
-          // Navigate to a page — minimize the agent panel first
+          // Navigate to a page — panel stays open (user controls it)
           if (ev.page) {
             const routes: Record<string, string> = { cart: "/cart", checkout: "/checkout", shop: "/shop", orders: "/orders", support: "/support", home: "/" };
             const route = routes[ev.page];
             if (route && typeof window !== "undefined") {
-              store.setAgentPanelMinimized(true);
               window.location.href = route;
             }
           }
