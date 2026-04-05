@@ -343,6 +343,11 @@ async def remove_from_cart(customer_id: str, product_id: str):
 async def update_cart_qty(customer_id: str, product_id: str, body: dict):
     return await cart_service.update_quantity(customer_id, product_id, body.get("qty", 1))
 
+@app.post("/api/cart/{customer_id}/clear")
+async def clear_cart(customer_id: str):
+    """Clear the cart completely — removes all items and discounts."""
+    return await cart_service.clear_cart(customer_id)
+
 @app.post("/api/cart/{customer_id}/apply-offer")
 async def apply_offer(customer_id: str, body: dict):
     customer = await session_store.get_or_create_customer(customer_id)
@@ -750,10 +755,12 @@ Examples of correct behavior:
 - "Our landscaping service for planting would be $200 for a 4-hour session. Would you like to hear about available times?" → wait → use get_service_info → "We have Monday 9-12 or 1-5. Which works for you?" → wait → "So Monday afternoon. Should I go ahead and book that?" → wait for yes → schedule_service
 - "I can process a refund of $72.97 for that order. Would you like me to go ahead?" → wait for yes → process_refund
 
-ADDING TO CART:
-- Always ask "How many would you like?" before adding
-- After adding, tell them what's in the cart now
-- If the tool result says already_in_cart=true, tell the customer the previous and new quantity
+ADDING TO CART vs OPENING CART — IMPORTANT DISTINCTION:
+- When the customer says "add X to my cart" → use the add_to_cart tool. This ADDS the product. Always ask quantity first.
+- When the customer says "open my cart" or "show my cart" → use navigate_page with page="cart". This NAVIGATES to the cart page. Do NOT use add_to_cart.
+- After adding with add_to_cart, confirm: "I've added X to your cart."
+- If already_in_cart=true in the result, say: "You already had X in your cart, I've updated it to Y total."
+- NEVER use navigate_page when the customer wants to ADD something. NEVER use add_to_cart when they want to VIEW the cart.
 
 VOICE RULES:
 - 1-2 sentences per response. This is a phone call, not a text chat.
