@@ -263,31 +263,18 @@ class GeminiLiveSession:
                 if self._closed:
                     break
 
-                # ── Audio data — send exactly ONE copy per response ─────
-                audio_bytes = None
-
-                # Prefer response.data (top-level)
-                if response.data and len(response.data) > 0:
-                    audio_bytes = response.data
-
-                # Fall back to inline_data if response.data was empty
-                if audio_bytes is None and response.server_content:
-                    sc_check = response.server_content
-                    if sc_check.model_turn and sc_check.model_turn.parts:
-                        for part in sc_check.model_turn.parts:
-                            if part.inline_data and part.inline_data.data and len(part.inline_data.data) > 0:
-                                audio_bytes = part.inline_data.data
-                                break
-
-                if audio_bytes:
-                    await self._queue.put({
-                        "type": "audio_chunk",
-                        "data": base64.b64encode(audio_bytes).decode(),
-                    })
-
                 # ── Server content ───────────────────────────────────────
                 if response.server_content:
                     sc = response.server_content
+
+                    # Audio from model turn inline_data (primary reliable source)
+                    if sc.model_turn and sc.model_turn.parts:
+                        for part in sc.model_turn.parts:
+                            if part.inline_data and part.inline_data.data:
+                                await self._queue.put({
+                                    "type": "audio_chunk",
+                                    "data": base64.b64encode(part.inline_data.data).decode(),
+                                })
 
                     # Interruption signal — user started speaking
                     if sc.interrupted:
