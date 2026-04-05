@@ -13,7 +13,7 @@ interface StorefrontLayoutProps {
   promoText?: string;
 }
 
-export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free shipping with code SPRING20" }: StorefrontLayoutProps) {
+export function StorefrontLayout({ children, promoText = "20% OFF with code SPRING20" }: StorefrontLayoutProps) {
   const store  = useStore();
   const router = useRouter();
   const cartCount = store.cart?.items?.length ?? 0;
@@ -119,6 +119,54 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
 
       {/* ── Cart drawer ────────────────────────────────────────────────── */}
       {store.showCart && <CartDrawer onClose={() => store.setShowCart(false)} />}
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <footer className={`border-t border-gray-200 bg-white transition-all duration-300 ${store.agentPanelOpen ? "mr-96" : ""}`}>
+        <div className="max-w-7xl mx-auto px-6 py-10">
+          <div className="grid grid-cols-4 gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "var(--green-600)" }}>
+                  <span className="text-white text-xs">🌿</span>
+                </div>
+                <span className="font-semibold text-gray-900">Bloom & Grow</span>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">Your garden, elevated. Premium plants, tools, and expert advice.</p>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Shop</h4>
+              <div className="space-y-2">
+                <Link href="/shop?category=plants" className="block text-xs text-gray-500 hover:text-green-700">Plants</Link>
+                <Link href="/shop?category=tools" className="block text-xs text-gray-500 hover:text-green-700">Tools</Link>
+                <Link href="/shop?filter=sale" className="block text-xs text-gray-500 hover:text-green-700">Sale</Link>
+                <Link href="/bundles" className="block text-xs text-gray-500 hover:text-green-700">Bundles</Link>
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Help</h4>
+              <div className="space-y-2">
+                <Link href="/care" className="block text-xs text-gray-500 hover:text-green-700">Plant Care</Link>
+                <Link href="/services" className="block text-xs text-gray-500 hover:text-green-700">Services</Link>
+                <Link href="/support" className="block text-xs text-gray-500 hover:text-green-700">Support</Link>
+                <Link href="/orders" className="block text-xs text-gray-500 hover:text-green-700">Orders</Link>
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Account</h4>
+              <div className="space-y-2">
+                <Link href="/profile" className="block text-xs text-gray-500 hover:text-green-700">Profile</Link>
+                <Link href="/cart" className="block text-xs text-gray-500 hover:text-green-700">Cart</Link>
+                <Link href="/checkout" className="block text-xs text-gray-500 hover:text-green-700">Checkout</Link>
+                <Link href="/manager" className="block text-xs text-gray-500 hover:text-green-700">Manager</Link>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-gray-100 pt-6 flex items-center justify-between">
+            <p className="text-xs text-gray-400">&copy; 2026 Bloom & Grow. All rights reserved.</p>
+            <p className="text-xs text-gray-400">Made by <span className="font-medium text-gray-600">Maurya Shah</span></p>
+          </div>
+        </div>
+      </footer>
 
       {/* ── Search overlay ─────────────────────────────────────────────── */}
       <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
