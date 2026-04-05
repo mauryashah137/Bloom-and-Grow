@@ -143,20 +143,32 @@ export default function ProductPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           {/* ── Left: Gallery ──────────────────────────────────────── */}
           <div className="space-y-4">
-            <div className="w-full aspect-square rounded-2xl flex items-center justify-center relative" style={{ background: "var(--cream-100)" }}>
-              <span className="text-[120px]">{galleryImages[galleryIdx]}</span>
+            <div className="w-full aspect-square rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "var(--cream-100)" }}>
+              {product.image_url?.startsWith("http") ? (
+                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[120px]">{galleryImages[galleryIdx]}</span>
+              )}
               {product.sale_price != null && (
                 <span className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full">SALE</span>
               )}
             </div>
             <div className="flex items-center justify-center gap-3">
-              {galleryImages.map((img: string, i: number) => (
-                <button key={i} onClick={() => setGalleryIdx(i)}
-                  className={`w-16 h-16 rounded-xl flex items-center justify-center transition-all ${galleryIdx === i ? "ring-2 ring-green-600 bg-green-50" : "border border-gray-200 hover:border-green-300"}`}
-                  style={{ background: galleryIdx === i ? undefined : "var(--cream-100)" }}>
-                  <span className="text-2xl">{img}</span>
+              {product.image_url?.startsWith("http") ? (
+                <button
+                  className="w-16 h-16 rounded-xl flex items-center justify-center transition-all ring-2 ring-green-600 bg-green-50 overflow-hidden"
+                >
+                  <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                 </button>
-              ))}
+              ) : (
+                galleryImages.map((img: string, i: number) => (
+                  <button key={i} onClick={() => setGalleryIdx(i)}
+                    className={`w-16 h-16 rounded-xl flex items-center justify-center transition-all ${galleryIdx === i ? "ring-2 ring-green-600 bg-green-50" : "border border-gray-200 hover:border-green-300"}`}
+                    style={{ background: galleryIdx === i ? undefined : "var(--cream-100)" }}>
+                    <span className="text-2xl">{img}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -310,8 +322,12 @@ export default function ProductPage() {
                 const emojis = CATEGORY_EMOJIS[p.category] || CATEGORY_EMOJIS.plants;
                 return (
                   <Link key={p.id} href={`/product/${p.id}`} className="bg-white rounded-2xl overflow-hidden hover:shadow-md transition-all border border-gray-100">
-                    <div className="h-32 flex items-center justify-center" style={{ background: "var(--cream-100)" }}>
-                      <span className="text-4xl">{emojis[0]}</span>
+                    <div className="h-32 flex items-center justify-center overflow-hidden" style={{ background: "var(--cream-100)" }}>
+                      {p.image_url?.startsWith("http") ? (
+                        <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-4xl">{emojis[0]}</span>
+                      )}
                     </div>
                     <div className="p-3">
                       <p className="text-sm text-gray-700 font-medium leading-tight">{p.name}</p>

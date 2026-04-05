@@ -92,8 +92,8 @@ export default function CheckoutPage() {
               {order.items?.map((item: any) => (
                 <div key={item.product_id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center">
-                      <span>🌱</span>
+                    <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center overflow-hidden">
+                      {item.image_url?.startsWith("http") ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" /> : <span>🌱</span>}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">{item.name}</p>

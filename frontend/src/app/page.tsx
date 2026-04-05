@@ -8,6 +8,7 @@ const CATEGORIES = [
     name: "Tools\nand accessories",
     href: "/shop?category=tools",
     image: "🌿",
+    image_url: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&h=400&fit=crop",
     bg: "bg-green-800",
     imgStyle: { background: "linear-gradient(135deg, #2d5a35 0%, #1a3c2b 100%)" },
   },
@@ -15,6 +16,7 @@ const CATEGORIES = [
     name: "Plants\nand supplies",
     href: "/shop?category=plants",
     image: "🪴",
+    image_url: "https://images.unsplash.com/photo-1463320726281-696a485928c7?w=600&h=400&fit=crop",
     bg: "bg-stone-100",
     imgStyle: { background: "linear-gradient(135deg, #f5f0e8 0%, #e8dcc8 100%)" },
   },
@@ -22,6 +24,7 @@ const CATEGORIES = [
     name: "Plant care\nand maintenance",
     href: "/care",
     image: "🌱",
+    image_url: "https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?w=600&h=400&fit=crop",
     bg: "bg-green-100",
     imgStyle: { background: "linear-gradient(135deg, #d4edda 0%, #a8d5b5 100%)" },
   },
@@ -29,16 +32,17 @@ const CATEGORIES = [
     name: "Landscaping\nservices",
     href: "/services",
     image: "🏡",
+    image_url: "https://images.unsplash.com/photo-1558171813-4c088753af8f?w=600&h=400&fit=crop",
     bg: "bg-stone-200",
     imgStyle: { background: "linear-gradient(135deg, #e8e0d0 0%, #d4c8b0 100%)" },
   },
 ];
 
 const FEATURED_PRODUCTS = [
-  { id: "P006", name: "Bloom Booster Potting Mix", price: 15.99, unit: "1 cubic foot", rating: 5, reviews: "1k", image: "🌿", category: "soil" },
-  { id: "P008", name: "Flower Power Fertilizer",   price: 22.98, unit: "0.75 cubic feet", rating: 5, reviews: "1k", image: "🌸", category: "fertilizers" },
-  { id: "P003", name: "Budget Bloom Mix",           price: 9.99,  unit: "0.5 cubic feet", rating: 4, reviews: "890", image: "🌻", category: "soil" },
-  { id: "P002", name: "Bloom & Grow Soil",          price: 18.99, unit: "1 cubic foot",   rating: 5, reviews: "1.2k", image: "🪴", category: "soil" },
+  { id: "P006", name: "Bloom Booster Potting Mix", price: 15.99, unit: "1 cubic foot", rating: 5, reviews: "1k", image: "🌿", image_url: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=400&fit=crop", category: "soil" },
+  { id: "P008", name: "Flower Power Fertilizer",   price: 22.98, unit: "0.75 cubic feet", rating: 5, reviews: "1k", image: "🌸", image_url: "https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=400&h=400&fit=crop", category: "fertilizers" },
+  { id: "P003", name: "Budget Bloom Mix",           price: 9.99,  unit: "0.5 cubic feet", rating: 4, reviews: "890", image: "🌻", image_url: "https://images.unsplash.com/photo-1572688484438-313a56e6dc34?w=400&h=400&fit=crop", category: "soil" },
+  { id: "P002", name: "Bloom & Grow Soil",          price: 18.99, unit: "1 cubic foot",   rating: 5, reviews: "1.2k", image: "🪴", image_url: "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=400&h=400&fit=crop", category: "soil" },
 ];
 
 export default function HomePage() {
@@ -68,9 +72,13 @@ export default function HomePage() {
                   className="relative h-52 flex items-center justify-center overflow-hidden"
                   style={cat.imgStyle}
                 >
-                  <span className="text-6xl group-hover:scale-110 transition-transform duration-300">
-                    {cat.image}
-                  </span>
+                  {cat.image_url ? (
+                    <img src={cat.image_url} alt={cat.name.replace("\n", " ")} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <span className="text-6xl group-hover:scale-110 transition-transform duration-300">
+                      {cat.image}
+                    </span>
+                  )}
                 </div>
                 {/* Label */}
                 <div className="bg-white px-4 py-3 flex items-center justify-between">
@@ -148,8 +156,12 @@ function ProductTile({ product }: { product: typeof FEATURED_PRODUCTS[0] }) {
       href={`/product/${product.id}`}
       className="group bg-white rounded-2xl overflow-hidden hover:shadow-md transition-all hover:-translate-y-0.5"
     >
-      <div className="h-40 flex items-center justify-center" style={{ background: "var(--cream-100)" }}>
-        <span className="text-5xl group-hover:scale-110 transition-transform duration-300">{product.image}</span>
+      <div className="h-40 flex items-center justify-center overflow-hidden" style={{ background: "var(--cream-100)" }}>
+        {product.image_url?.startsWith("http") ? (
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        ) : (
+          <span className="text-5xl group-hover:scale-110 transition-transform duration-300">{product.image}</span>
+        )}
       </div>
       <div className="p-4">
         <div className="flex items-center gap-1 mb-1">

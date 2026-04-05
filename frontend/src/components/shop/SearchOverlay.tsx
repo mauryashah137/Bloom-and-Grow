@@ -150,8 +150,12 @@ export function SearchOverlay({ isOpen, onClose }: { isOpen: boolean; onClose: (
                     onClick={onClose}
                     className="flex gap-3 p-4 rounded-xl border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group"
                   >
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--cream-100)" }}>
-                      <span className="text-2xl">{emoji}</span>
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0 overflow-hidden" style={{ background: "var(--cream-100)" }}>
+                      {product.image_url?.startsWith("http") ? (
+                        <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl">{emoji}</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-gray-900 group-hover:text-green-800 text-sm leading-tight">

@@ -99,7 +99,11 @@ export function CartDrawer({ onClose }: { onClose: () => void }) {
             cart.items.map(item => (
               <div key={item.product_id} className="flex items-center gap-4">
                 <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-gray-50 flex items-center justify-center">
-                  <span className="text-3xl">🌱</span>
+                  {item.image_url?.startsWith("http") ? (
+                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-3xl">🌱</span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   {item.added_by_agent && (

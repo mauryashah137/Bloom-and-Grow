@@ -151,7 +151,11 @@ function ProductCard({ product, onAddToCart }: { product: Product; onAddToCart: 
     <div className="bg-white rounded-2xl overflow-hidden hover:shadow-lg transition-all hover:-translate-y-0.5 group">
       <Link href={`/product/${product.id}`}>
         <div className="h-44 flex items-center justify-center relative overflow-hidden" style={{ background: "var(--cream-100)" }}>
-          <span className="text-5xl group-hover:scale-110 transition-transform duration-300">{emoji}</span>
+          {product.image_url?.startsWith("http") ? (
+            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          ) : (
+            <span className="text-5xl group-hover:scale-110 transition-transform duration-300">{emoji}</span>
+          )}
           {onSale && (
             <span className="absolute top-3 left-3 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">SALE</span>
           )}
