@@ -243,6 +243,10 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   }, [store, session]);
 
   const handleEndCall = useCallback(() => {
+    // Force stop everything immediately
+    session.stopMic();
+    session.stopCamera();
+    session.stopPlayback();
     session.disconnect();
     store.setAgentPanelOpen(false);
     setShowCameraPrompt(false);
