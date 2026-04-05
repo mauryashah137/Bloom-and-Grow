@@ -35,11 +35,12 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
 
           {/* Nav links */}
           <nav className="flex items-center gap-6 flex-1">
-            <div className="flex items-center gap-1 cursor-pointer hover:text-green-700 transition-colors">
+            <Link href="/" className="flex items-center gap-1 hover:text-green-700 transition-colors">
               <span className="text-sm font-medium text-gray-700">Shop</span>
               <ChevronDown size={14} className="text-gray-500" />
-            </div>
-            <Link href="/shop?filter=sale" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Sale</Link>
+            </Link>
+            <Link href="/shop?filter=sale" className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors">Sale</Link>
+            <Link href="/bundles" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Bundles</Link>
             <Link href="/care" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Plant Care</Link>
             <Link href="/services" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Services</Link>
             <Link href="/support" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Support</Link>
@@ -76,11 +77,11 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
             {[
               { label: "House Plants", href: "/shop?category=plants" },
               { label: "Tools & Accessories", href: "/shop?category=tools" },
-              { label: "Plant Care Guides", href: "/care" },
-              { label: "Landscaping Services", href: "/services" },
-              { label: "Best Sellers", href: "/shop" },
+              { label: "Sale Items", href: "/shop?filter=sale" },
+              { label: "Bundle Deals", href: "/bundles" },
+              { label: "Plant Care", href: "/care" },
+              { label: "Services", href: "/services" },
               { label: "Orders", href: "/orders" },
-              { label: "Manager", href: "/manager" },
             ].map(item => (
               <Link
                 key={item.label}

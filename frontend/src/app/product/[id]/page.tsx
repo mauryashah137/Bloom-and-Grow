@@ -9,7 +9,19 @@ import { ChevronLeft, ChevronRight, Star, Minus, Plus } from "lucide-react";
 const API = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws")
   .replace(/^wss?:\/\//, "https://").replace("/ws", "");
 
-const MOCK_GALLERY_IMAGES = ["🌿", "👩‍🌾", "🌱"];
+const CATEGORY_EMOJIS: Record<string, string[]> = {
+  plants: ["🌿", "🪴", "🌱"],
+  soil: ["🌍", "🪨", "🌱"],
+  fertilizers: ["🌸", "💧", "🌱"],
+  pots: ["🏺", "🪴", "🌱"],
+  tools: ["🔧", "✂️", "🛠️"],
+  lighting: ["💡", "☀️", "🔆"],
+  accessories: ["✨", "🌡️", "💧"],
+  bundles: ["🎁", "📦", "🌿"],
+  "pest-control": ["🛡️", "🐛", "🌿"],
+  decor: ["🎍", "🌸", "🏡"],
+  default: ["🌿", "🌱", "🪴"],
+};
 
 export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -101,37 +113,52 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const price = product.sale_price ?? product.price;
   const reviewCount = product.review_count ?? 0;
   const rating = product.rating ?? 0;
+  const galleryImages = CATEGORY_EMOJIS[product.category] || CATEGORY_EMOJIS.default;
+  const isInCart = store.cart?.items?.some(i => i.product_id === product.id) ?? false;
+
+  const removeFromCart = async () => {
+    try {
+      const r = await fetch(`${API}/api/cart/${store.customerId}/item/${product.id}`, { method: "DELETE" });
+      if (r.ok) {
+        const d = await r.json();
+        const cart = d.cart || d;
+        if (cart.items) store.setCart(cart);
+      }
+    } catch {}
+  };
 
   return (
     <StorefrontLayout>
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-8">
-          <Link href="/shop" className="hover:text-green-700 transition-colors">Products</Link>
+          <Link href="/" className="hover:text-green-700 transition-colors">Home</Link>
           <span>›</span>
-          <Link href={`/shop?category=${product.category}`} className="hover:text-green-700 transition-colors capitalize">
-            {product.category === "soil" ? "Garden Accessories" : product.category}
+          <Link href={`/shop?category=${product.category === "tools" || product.category === "lighting" || product.category === "accessories" ? "tools" : "plants"}`} className="hover:text-green-700 transition-colors capitalize">
+            {product.category}
           </Link>
+          <span>›</span>
+          <span className="text-gray-400">{product.name}</span>
         </div>
 
         <div className="grid grid-cols-2 gap-16">
           {/* Left: Image gallery */}
           <div className="space-y-4">
             <div className="w-full aspect-square rounded-2xl flex items-center justify-center" style={{ background: "var(--cream-100)" }}>
-              <span className="text-9xl">{MOCK_GALLERY_IMAGES[galleryIdx]}</span>
+              <span className="text-9xl">{galleryImages[galleryIdx]}</span>
             </div>
             <div className="flex items-center gap-3">
               <button onClick={() => setGalleryIdx(i => Math.max(0, i - 1))} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50">
                 <ChevronLeft size={14} />
               </button>
-              {MOCK_GALLERY_IMAGES.map((img, i) => (
+              {galleryImages.map((img, i) => (
                 <button key={i} onClick={() => setGalleryIdx(i)}
                   className={`w-16 h-16 rounded-xl flex items-center justify-center transition-all ${galleryIdx === i ? "ring-2 ring-green-600" : "border border-gray-200"}`}
                   style={{ background: "var(--cream-100)" }}>
                   <span className="text-2xl">{img}</span>
                 </button>
               ))}
-              <button onClick={() => setGalleryIdx(i => Math.min(MOCK_GALLERY_IMAGES.length - 1, i + 1))} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50">
+              <button onClick={() => setGalleryIdx(i => Math.min(galleryImages.length - 1, i + 1))} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50">
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -192,23 +219,33 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
               </div>
             )}
 
-            {/* Add to cart */}
-            <div className="flex items-center gap-4">
-              <button
-                onClick={addToCart}
-                disabled={adding || added}
-                className="flex-1 py-4 rounded-xl text-white font-semibold text-base transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-70"
-                style={{ background: "var(--green-900)" }}
-              >
-                {added ? "Added!" : adding ? "Adding..." : "Add to Cart"}
-              </button>
-              <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-3">
-                <button onClick={() => setQty(q => Math.max(1, q - 1))} className="text-gray-500 hover:text-gray-700"><Minus size={14} /></button>
-                <select value={qty} onChange={e => setQty(Number(e.target.value))} className="bg-transparent border-none outline-none text-sm font-medium text-gray-900 cursor-pointer w-8 text-center">
-                  {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <button onClick={() => setQty(q => q + 1)} className="text-gray-500 hover:text-gray-700"><Plus size={14} /></button>
+            {/* Cart actions */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={addToCart}
+                  disabled={adding || added}
+                  className="flex-1 py-4 rounded-xl text-white font-semibold text-base transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-70"
+                  style={{ background: "var(--green-900)" }}
+                >
+                  {added ? "Added!" : adding ? "Adding..." : isInCart ? "Add More" : "Add to Cart"}
+                </button>
+                <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-3">
+                  <button onClick={() => setQty(q => Math.max(1, q - 1))} className="text-gray-500 hover:text-gray-700"><Minus size={14} /></button>
+                  <select value={qty} onChange={e => setQty(Number(e.target.value))} className="bg-transparent border-none outline-none text-sm font-medium text-gray-900 cursor-pointer w-8 text-center">
+                    {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <button onClick={() => setQty(q => q + 1)} className="text-gray-500 hover:text-gray-700"><Plus size={14} /></button>
+                </div>
               </div>
+              {isInCart && (
+                <button
+                  onClick={removeFromCart}
+                  className="w-full py-3 rounded-xl border-2 border-red-200 text-red-600 font-semibold text-sm transition-all hover:bg-red-50 active:scale-[0.98]"
+                >
+                  Remove from Cart
+                </button>
+              )}
             </div>
           </div>
         </div>

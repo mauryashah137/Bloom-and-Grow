@@ -32,13 +32,16 @@ function ShopContent() {
   const store        = useStore();
 
   const urlCategory = searchParams.get("category") || "";
+  const urlFilter = searchParams.get("filter") || "";
+  const isSalePage = urlFilter === "sale";
 
   // Determine which filter pills to show based on URL category
   const filterList = useMemo(() => {
+    if (isSalePage) return ["All", "Plants", "Tools", "Soil", "Accessories"];
     if (urlCategory === "tools") return TOOLS_CATEGORIES;
     if (urlCategory === "plants") return PLANTS_CATEGORIES;
     return ALL_CATEGORIES;
-  }, [urlCategory]);
+  }, [urlCategory, isSalePage]);
 
   // Reset active filter when URL category changes
   useEffect(() => {
@@ -65,16 +68,21 @@ function ShopContent() {
     }
   };
 
-  // First, filter by URL category param (broad category group)
+  // First, filter by URL category param or sale filter
   const categoryFiltered = useMemo(() => {
+    let result = products;
+    // Sale filter — only items with sale_price
+    if (isSalePage) {
+      result = result.filter(p => p.sale_price != null);
+    }
+    // Category filter
     if (urlCategory === "tools") {
-      return products.filter(p => TOOLS_CATALOG.includes(p.category.toLowerCase()));
+      result = result.filter(p => TOOLS_CATALOG.includes(p.category.toLowerCase()));
+    } else if (urlCategory === "plants") {
+      result = result.filter(p => PLANTS_CATALOG.includes(p.category.toLowerCase()));
     }
-    if (urlCategory === "plants") {
-      return products.filter(p => PLANTS_CATALOG.includes(p.category.toLowerCase()));
-    }
-    return products;
-  }, [products, urlCategory]);
+    return result;
+  }, [products, urlCategory, isSalePage]);
 
   // Then, filter by the active pill filter
   const filtered = useMemo(() => {
@@ -85,9 +93,15 @@ function ShopContent() {
     );
   }, [categoryFiltered, activeFilter]);
 
+  const pageTitle = isSalePage ? "Sale Items" : urlCategory === "tools" ? "Tools & Accessories" : urlCategory === "plants" ? "Plants & Supplies" : "All Products";
+
   return (
     <StorefrontLayout>
       <div className="max-w-7xl mx-auto px-6 py-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6" style={{ fontFamily: "'DM Serif Display', serif" }}>
+          {pageTitle}
+          {isSalePage && <span className="ml-2 text-red-500 text-lg">🔥</span>}
+        </h1>
         <div className="flex items-center gap-3 mb-8 overflow-x-auto pb-1">
           {filterList.map(cat => (
             <button
