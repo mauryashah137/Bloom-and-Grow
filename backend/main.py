@@ -299,16 +299,27 @@ async def run_relay(ws: WebSocket, gemini: "GeminiLiveSession", session_id: str)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/products")
 async def list_products(category: str = None, q: str = None, limit: int = 20):
-    return {"products": await catalog.search(query=q, category=category, limit=limit)}
+    products = await catalog.search(query=q, category=category, limit=limit)
+    # Return clean copies without any nested refs that could cause recursion
+    return {"products": [
+        {k: v for k, v in p.items() if k != "complementary_products"}
+        for p in products
+    ]}
 
 @app.get("/api/products/{product_id}")
 async def get_product(product_id: str):
     p = await catalog.get(product_id)
     if not p:
         raise HTTPException(404, "Product not found")
+    # Return a copy to avoid mutating the catalog + circular refs
+    result = dict(p)
     comps = await catalog_service.find_complementary(product_id, limit=3)
-    p["complementary_products"] = comps
-    return p
+    # Return clean copies of complementary products (no nested complementary)
+    result["complementary_products"] = [
+        {k: v for k, v in c.items() if k != "complementary_products"}
+        for c in comps
+    ]
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
