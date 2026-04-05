@@ -95,24 +95,48 @@ class ToolDispatcher:
         if self.cart and customer_id:
             cart = await self.cart.get_cart(customer_id)
             cart_items = cart.get("items", [])
-            if cart_items:
-                cart_analysis = []
-                plant_name = result.get("candidates", [{}])[0].get("name", "this plant") if result.get("candidates") else "this plant"
-                for item in cart_items:
-                    name = item.get("name", "")
-                    # Check if cart items are suitable for the identified plant
-                    if any(kw in name.lower() for kw in ["potting", "soil", "mix"]):
-                        if "premium" in name.lower() or "bloom" in name.lower():
-                            cart_analysis.append({"item": name, "verdict": "good", "reason": f"Good choice for {plant_name}"})
-                        else:
-                            cart_analysis.append({"item": name, "verdict": "could_improve", "reason": f"This is basic soil. {plant_name} would thrive better with premium potting mix"})
-                    elif any(kw in name.lower() for kw in ["fertilizer", "feed"]):
-                        if "flower" in name.lower() or "bloom" in name.lower():
-                            cart_analysis.append({"item": name, "verdict": "good", "reason": f"Great fertilizer choice for {plant_name}"})
-                        else:
-                            cart_analysis.append({"item": name, "verdict": "could_improve", "reason": f"A flowering-specific fertilizer would be better for {plant_name}"})
-                result["cart_comparison"] = cart_analysis
-                result["cart_items_count"] = len(cart_items)
+            plant_name = result.get("candidates", [{}])[0].get("name", "this plant") if result.get("candidates") else "this plant"
+            ideal_soil = result.get("ideal_soil_type", "general-purpose")
+            ideal_fert = result.get("ideal_fertilizer", "balanced")
+
+            cart_analysis = []
+            has_soil = False
+            has_fertilizer = False
+            has_pot = False
+
+            for item in cart_items:
+                name = item.get("name", "").lower()
+                if any(kw in name for kw in ["potting", "soil", "mix"]):
+                    has_soil = True
+                    if "premium" in name or "bloom" in name or ideal_soil.split("-")[0] in name:
+                        cart_analysis.append({"item": item["name"], "verdict": "good", "reason": f"Suitable for {plant_name}!"})
+                    else:
+                        cart_analysis.append({"item": item["name"], "verdict": "swap_recommended", "reason": f"Basic soil — {plant_name} prefers {ideal_soil} soil. Consider Bloom Booster Potting Mix instead."})
+                elif any(kw in name for kw in ["fertilizer", "feed", "nutrient"]):
+                    has_fertilizer = True
+                    if ideal_fert.split("-")[0] in name or "all-purpose" in name:
+                        cart_analysis.append({"item": item["name"], "verdict": "good", "reason": f"Works well for {plant_name}."})
+                    else:
+                        cart_analysis.append({"item": item["name"], "verdict": "swap_recommended", "reason": f"{plant_name} does better with {ideal_fert} fertilizer."})
+                elif any(kw in name for kw in ["pot", "planter", "ceramic", "terracotta"]):
+                    has_pot = True
+                    cart_analysis.append({"item": item["name"], "verdict": "good", "reason": "Good pot choice."})
+
+            # Suggest missing essentials
+            missing = []
+            if not has_soil:
+                missing.append(f"{ideal_soil} potting soil")
+            if not has_fertilizer:
+                missing.append(f"{ideal_fert} fertilizer")
+            if not has_pot:
+                missing.append("a suitable pot")
+
+            result["cart_comparison"] = cart_analysis
+            result["cart_items_count"] = len(cart_items)
+            result["missing_essentials"] = missing
+            result["has_soil"] = has_soil
+            result["has_fertilizer"] = has_fertilizer
+            result["has_pot"] = has_pot
 
         return result
 

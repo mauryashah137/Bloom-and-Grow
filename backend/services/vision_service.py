@@ -102,10 +102,19 @@ Customer preferences:
 - Garden type: {preferences.get('garden_type', 'unknown')}
 - Budget range: {preferences.get('budget_range', 'unknown')}
 """
-        return f"""Analyze this image and identify what is shown. This is for a garden and home retail store.
+        return f"""Analyze this image for a garden and home retail store called Bloom & Grow.
 
 {f'Customer said: "{context}"' if context else ''}
 {pref_text}
+
+IMPORTANT EDGE CASES TO HANDLE:
+- If the image is blurry, dark, or unclear: set confidence very low and ask for a clearer photo
+- If you see a non-plant object (person, furniture, etc.): identify it but set category to "other"
+- If you see a DAMAGED product (broken pot, torn bag, dead plant): note the damage in health_assessment
+- If you see MULTIPLE plants: identify each one in separate candidates
+- If you see PESTS (bugs, webs, spots on leaves): set issue_detected appropriately
+- If you see a PRODUCT LABEL or packaging: read the label and identify the product
+- If the image shows nothing relevant: set candidates to empty and suggest the customer try again
 
 Return a JSON object with this exact structure:
 {{
@@ -114,17 +123,24 @@ Return a JSON object with this exact structure:
             "name": "Common name of the plant/product",
             "scientific_name": "Scientific name if applicable",
             "confidence": 0.0 to 1.0,
-            "category": "houseplant|outdoor_plant|succulent|tool|soil|pot|fertilizer|pest_control|decor|other",
-            "description": "Brief description of what was identified"
+            "category": "houseplant|outdoor_plant|succulent|flowering|tool|soil|pot|fertilizer|pest_control|decor|damaged|other",
+            "description": "Brief description of what was identified",
+            "is_damaged": false,
+            "damage_description": "Description of damage if any"
         }}
     ],
     "health_assessment": {{
-        "status": "healthy|minor_issues|needs_attention|critical",
-        "observations": ["list of observations about condition"],
-        "recommendations": ["list of care recommendations"]
+        "status": "healthy|minor_issues|needs_attention|critical|damaged|dead",
+        "observations": ["list of specific observations about condition"],
+        "recommendations": ["list of actionable care or repair recommendations"]
     }},
-    "issue_detected": "none|overwatering|underwatering|pest_infestation|nutrient_deficiency|sunburn|root_rot|damage|other",
-    "next_question": "A helpful follow-up question to ask the customer to better assist them",
+    "issue_detected": "none|overwatering|underwatering|pest_infestation|nutrient_deficiency|sunburn|root_rot|physical_damage|shipping_damage|mold|fungal|other",
+    "image_quality": "good|blurry|dark|partial|too_far|no_subject",
+    "multiple_items": false,
+    "ideal_soil_type": "well-draining|moisture-retaining|acidic|alkaline|sandy|general-purpose",
+    "ideal_fertilizer": "balanced|flowering|foliage|succulent|organic|none-needed",
+    "light_needs": "bright-direct|bright-indirect|medium|low-light|full-sun",
+    "next_question": "A helpful follow-up question to ask the customer",
     "care_tips": ["list of relevant care tips"]
 }}
 
@@ -139,12 +155,19 @@ Be specific and accurate. If uncertain, lower the confidence score. Always provi
             c.setdefault("category", "other")
             c.setdefault("description", "")
             c.setdefault("scientific_name", "")
+            c.setdefault("is_damaged", False)
+            c.setdefault("damage_description", "")
         result.setdefault("health_assessment", {
             "status": "healthy",
             "observations": [],
             "recommendations": [],
         })
         result.setdefault("issue_detected", "none")
+        result.setdefault("image_quality", "good")
+        result.setdefault("multiple_items", False)
+        result.setdefault("ideal_soil_type", "general-purpose")
+        result.setdefault("ideal_fertilizer", "balanced")
+        result.setdefault("light_needs", "bright-indirect")
         result.setdefault("next_question", "Would you like product recommendations for this?")
         result.setdefault("care_tips", [])
         result.setdefault("catalog_matches", [])
