@@ -84,12 +84,6 @@ class OfferService:
                 "error": f"Minimum order of ${offer['min_order']:.2f} required for '{code}'. Your cart is ${cart_subtotal:.2f}.",
             }
 
-        # Check usage
-        usage_key = f"{customer_id}:{code}"
-        uses = _USAGE.get(usage_key, 0)
-        if uses >= offer["max_uses"]:
-            return {"success": False, "error": f"Code '{code}' has already been used the maximum number of times ({offer['max_uses']})."}
-
         # Check stacking
         if not offer.get("stackable") and self._cart:
             cart = await self._cart.get_cart(customer_id)
@@ -104,7 +98,6 @@ class OfferService:
                     }
 
         # Apply
-        _USAGE[usage_key] = uses + 1
         if self._cart:
             await self._cart.apply_offer(customer_id, code, offer["discount_pct"])
 
