@@ -91,9 +91,8 @@ export function useGeminiSession() {
   }, [store]);
 
   const stopPlayback = useCallback(() => {
-    // Reset play schedule to current time — skips any queued audio
     if (playCtxRef.current) {
-      nextPlayTime.current = playCtxRef.current.currentTime + 10; // Jump ahead to skip queued buffers
+      nextPlayTime.current = playCtxRef.current.currentTime;
     }
     lastChunkId.current = "";
     recentChunks.current.clear();
