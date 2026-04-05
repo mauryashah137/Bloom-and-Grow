@@ -30,6 +30,13 @@ class CartService:
         if len(cart.get("items", [])) >= MAX_CART_ITEMS:
             return {"error": f"Cart is full (max {MAX_CART_ITEMS} items). Please remove some items first.", "success": False}
 
+        # If cart was empty, reset any stale discount from previous session
+        if not cart.get("items"):
+            cart["discount_pct"] = 0
+            cart["offer_code"] = None
+            cart["discount_reason"] = None
+            await self._cart._save(customer_id, cart)
+
         result = await self._cart.add_item(customer_id, product_id, qty)
         if result.get("error"):
             return result
@@ -47,6 +54,12 @@ class CartService:
 
         result = await self._cart.remove_item(customer_id, product_id)
         cart = result.get("cart", result)
+        # If cart is now empty, clear discount
+        if not cart.get("items"):
+            cart["discount_pct"] = 0
+            cart["offer_code"] = None
+            cart["discount_reason"] = None
+            await self._cart._save(customer_id, cart)
         if self._pricing:
             cart = await self._pricing.compute_totals(cart)
         return {"success": True, "cart": cart}
