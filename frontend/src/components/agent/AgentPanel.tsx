@@ -238,9 +238,19 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const handleCameraAccept = useCallback(async () => {
     setShowCameraPrompt(false);
     if (videoRef.current) {
-      await session.startCamera(videoRef.current);
+      try {
+        await session.startCamera(videoRef.current);
+      } catch (e) {
+        console.error("Camera access failed:", e);
+        // Show a text card about camera failure
+        store.addActionCard({
+          id: `cam-err-${Date.now()}`, type: "text",
+          message: "Unable to access camera. Please check your browser permissions and try again.",
+          ts: Date.now() / 1000,
+        });
+      }
     }
-  }, [session]);
+  }, [session, store]);
 
   const handleCameraDecline = useCallback(() => {
     setShowCameraPrompt(false);
@@ -344,21 +354,18 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
             </div>
           </div>
 
-          {/* Camera preview with stop button */}
-          {store.isCameraActive && (
-            <div className="px-5 pb-3">
-              <div className="rounded-xl overflow-hidden relative">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-44 object-cover" />
-                <button
-                  onClick={() => { session.stopCamera(); setShowCameraPrompt(false); }}
-                  className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors"
-                >
-                  <Camera size={12} /> Stop sharing video
-                </button>
-              </div>
+          {/* Camera — always render video element, toggle visibility */}
+          <div className={`px-5 pb-3 ${store.isCameraActive ? "" : "hidden"}`}>
+            <div className="rounded-xl overflow-hidden relative bg-black">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-44 object-cover" />
+              <button
+                onClick={() => { session.stopCamera(); setShowCameraPrompt(false); }}
+                className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors"
+              >
+                <Camera size={12} /> Stop sharing video
+              </button>
             </div>
-          )}
-          {!store.isCameraActive && <video ref={videoRef} className="hidden" />}
+          </div>
 
           {/* Main content — action cards */}
           <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
