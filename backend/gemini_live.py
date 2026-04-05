@@ -52,9 +52,9 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "recommend_products": types.FunctionDeclaration(
         name="recommend_products",
-        description="Search for product recommendations. Returns a list of suggestions. IMPORTANT: After getting results, TELL the customer what you found and ASK if they want to add anything. Do NOT auto-add to cart.",
+        description="Search our catalog for products. CRITICAL: Check the 'exact_match_found' and 'note' fields in the result. If exact_match_found is false, tell the customer we DON'T carry that item but show alternatives. NEVER claim we sell something if exact_match_found is false.",
         parameters=types.Schema(type=types.Type.OBJECT, properties={
-            "need": types.Schema(type=types.Type.STRING, description="What the customer needs"),
+            "need": types.Schema(type=types.Type.STRING, description="What the customer is looking for — use this to search"),
             "budget_max": types.Schema(type=types.Type.NUMBER, description="Max budget in USD"),
             "category": types.Schema(type=types.Type.STRING, description="Category: plants, tools, soil, pots, decor"),
             "skill_level": types.Schema(type=types.Type.STRING, enum=["beginner", "intermediate", "expert"]),
@@ -167,7 +167,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "connect_to_human": types.FunctionDeclaration(
         name="connect_to_human",
-        description="Transfer to a human specialist. Tell the customer you are transferring them and why.",
+        description="Transfer to a human specialist. ONLY use when: 1) Customer explicitly asks to speak to a human/manager, 2) You cannot resolve their issue after trying, 3) They are very frustrated and need escalation. NEVER call this on greetings, simple questions, or normal conversation.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["reason"], properties={
             "reason": types.Schema(type=types.Type.STRING),
             "priority": types.Schema(type=types.Type.STRING, enum=["normal", "urgent"]),

@@ -165,9 +165,11 @@ class ToolDispatcher:
         # Get vision context if available
         vision_result = ctx.get("last_vision_result")
 
+        need = args.get("need", "")
+
         if self.recommender:
             result = await self.recommender.recommend(
-                need=args.get("need", ""),
+                need=need,
                 category=args.get("category"),
                 budget_max=args.get("budget_max"),
                 skill_level=args.get("skill_level", "beginner"),
@@ -176,11 +178,10 @@ class ToolDispatcher:
                 vision_result=vision_result,
             )
         else:
-            # Fallback to basic catalog search
             catalog = ctx.get("catalog")
             if catalog:
                 products = await catalog.recommend(
-                    need=args.get("need", ""),
+                    need=need,
                     category=args.get("category"),
                     budget_max=args.get("budget_max"),
                     skill_level=args.get("skill_level", "beginner"),
@@ -188,6 +189,21 @@ class ToolDispatcher:
                 result = {"products": products, "count": len(products), "personalized_for": args.get("skill_level", "beginner")}
             else:
                 result = {"products": [], "count": 0}
+
+        # CRITICAL: Tell the agent clearly whether the requested item exists
+        products = result.get("products", [])
+        if need and products:
+            # Check if any product name closely matches what was asked for
+            need_lower = need.lower()
+            exact_match = any(need_lower in p.get("name", "").lower() for p in products)
+            result["exact_match_found"] = exact_match
+            if not exact_match:
+                result["note"] = f"We don't carry '{need}' specifically. These are similar alternatives from our catalog."
+            else:
+                result["note"] = f"Found matching products for '{need}'."
+        elif need and not products:
+            result["exact_match_found"] = False
+            result["note"] = f"We don't currently carry '{need}'. We don't have any similar items either."
 
         return result
 
