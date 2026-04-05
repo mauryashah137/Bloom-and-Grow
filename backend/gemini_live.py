@@ -84,7 +84,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "apply_offer": types.FunctionDeclaration(
         name="apply_offer",
-        description="Apply a promo code to the cart. Only call when the customer provides a specific code.",
+        description="Apply a promo code to the cart. ONLY call when the customer explicitly gives you a promo code to apply. Never call on greetings or without a specific code from the customer.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["offer_code"], properties={
             "offer_code": types.Schema(type=types.Type.STRING),
         }),
