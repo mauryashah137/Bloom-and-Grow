@@ -20,15 +20,26 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
   const cartCount = store.cart?.items?.length ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Global cleanup — kill ALL media when panel closes or minimizes
+  // Global cleanup — subscribe directly to store changes (works across all pages)
   useEffect(() => {
-    if (!store.agentPanelOpen || store.agentPanelMinimized) {
-      killAllMedia();
-      store.setMicActive(false);
-      store.setCameraActive(false);
-      store.setAgentSpeaking(false);
-    }
-  }, [store.agentPanelOpen, store.agentPanelMinimized]);
+    const unsub = useStore.subscribe((state, prev) => {
+      // Panel just closed
+      if (prev.agentPanelOpen && !state.agentPanelOpen) {
+        killAllMedia();
+        state.setMicActive(false);
+        state.setCameraActive(false);
+        state.setAgentSpeaking(false);
+      }
+      // Panel just minimized
+      if (!prev.agentPanelMinimized && state.agentPanelMinimized) {
+        killAllMedia();
+        state.setMicActive(false);
+        state.setCameraActive(false);
+        state.setAgentSpeaking(false);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Handle navigation requests from the chatbot — uses router.push (no page reload)
   useEffect(() => {
