@@ -26,6 +26,7 @@ export function useGeminiSession() {
   const cameraRef    = useRef<MediaStream | null>(null);
   const camIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canvasRef    = useRef<HTMLCanvasElement | null>(null);
+  const sessionStartTime = useRef<number>(0);
 
   const store = useStore();
 
@@ -184,6 +185,7 @@ export function useGeminiSession() {
         case "session_started":
           store.setSessionId(ev.session_id);
           store.setSessionStatus("connected");
+          sessionStartTime.current = Date.now();
           if (ev.customer) store.setCustomer(ev.customer);
           startMic();
           break;
@@ -220,13 +222,18 @@ export function useGeminiSession() {
         case "recommendation":
           if (ev.products?.length) {
             store.setRecommendations(ev.products);
-            store.addActionCard({ id: `rec-${Date.now()}`, type: "recommendation", title: "Recommended for you", products: ev.products, ts: Date.now() / 1000 });
+            // Only show recommendation card after greeting phase (8s)
+            if (Date.now() - sessionStartTime.current > 8000) {
+              store.addActionCard({ id: `rec-${Date.now()}`, type: "recommendation", title: "Recommended for you", products: ev.products, ts: Date.now() / 1000 });
+            }
           }
           break;
 
         case "vision_result":
           store.setVisionResult(ev);
-          store.addActionCard({ id: `vis-${Date.now()}`, type: "vision", title: ev.candidates?.[0]?.name || "Visual Identification", visionResult: ev, products: ev.catalog_matches || [], ts: Date.now() / 1000 });
+          if (Date.now() - sessionStartTime.current > 8000) {
+            store.addActionCard({ id: `vis-${Date.now()}`, type: "vision", title: ev.candidates?.[0]?.name || "Visual Identification", visionResult: ev, products: ev.catalog_matches || [], ts: Date.now() / 1000 });
+          }
           break;
 
         case "sentiment":
@@ -245,7 +252,7 @@ export function useGeminiSession() {
 
         case "service_info":
           // Show available times — NOT a booking confirmation
-          if (ev.service) {
+          if (ev.service && Date.now() - sessionStartTime.current > 8000) {
             const svc = ev.service;
             const slots = svc.available_slots?.join(", ") || "No slots available";
             store.addActionCard({
