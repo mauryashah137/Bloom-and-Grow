@@ -3,6 +3,11 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { useStore } from "@/store";
 import type { AgentActionCard, Product } from "@/lib/types";
 import { useGeminiSession } from "@/hooks/useGeminiSession";
+
+// Strip markdown formatting (* ** _ etc.) for clean voice transcript display
+function cleanText(text: string): string {
+  return text.replace(/\*\*/g, "").replace(/\*/g, "").replace(/__/g, "").replace(/_/g, "").replace(/#{1,6}\s/g, "").replace(/`/g, "").trim();
+}
 import { Minus, X, MessageSquare, Mic, Camera, PhoneOff, ArrowUpRight, Upload, CheckCircle, Clock, XCircle, MapPin, Send } from "lucide-react";
 
 // ── Wave bars ────────────────────────────────────────────────────────────────
@@ -81,7 +86,7 @@ function VisionCard({ card, onNavigate }: { card: AgentActionCard; onNavigate?: 
             <p className="text-white/50 text-xs italic">{topCandidate.scientific_name}</p>
           )}
           {topCandidate.description && (
-            <p className="text-white/70 text-xs leading-relaxed">{topCandidate.description}</p>
+            <p className="text-white/70 text-xs leading-relaxed">{cleanText(topCandidate.description)}</p>
           )}
         </div>
       )}
@@ -400,7 +405,7 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
                     <div className={`max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
                       t.role === "user" ? "bg-[#4db876]/20 text-white/80" : "bg-white/10 text-white/80"
                     }`}>
-                      {t.text}
+                      {cleanText(t.text)}
                     </div>
                   </div>
                 ))}
@@ -440,7 +445,7 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
                   </div>
                 )}
                 {latestCard.type === "text" && latestCard.message && (
-                  <p className="text-white text-sm leading-relaxed">{latestCard.message}</p>
+                  <p className="text-white text-sm leading-relaxed">{cleanText(latestCard.message)}</p>
                 )}
               </div>
             )}
