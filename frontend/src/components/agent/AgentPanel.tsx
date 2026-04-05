@@ -245,6 +245,9 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const handleEndCall = useCallback(() => {
     session.disconnect();
     store.setAgentPanelOpen(false);
+    setShowCameraPrompt(false);
+    setUploadedImage(null);
+    setAnalyzing(false);
   }, [session, store]);
 
   const handleCameraToggle = useCallback(async () => {
@@ -373,11 +376,13 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
               const willMinimize = !store.agentPanelMinimized;
               store.setAgentPanelMinimized(willMinimize);
               if (willMinimize) {
-                // Stop mic, camera, and audio when minimized
+                // Stop everything when minimized
                 session.stopMic();
                 session.stopCamera();
                 session.stopPlayback();
                 setShowCameraPrompt(false);
+                setUploadedImage(null);
+                setAnalyzing(false);
               } else if (!willMinimize && isConnected) {
                 // Restart mic when expanded (camera stays off — user must re-enable)
                 if (!store.isMicActive) session.startMic();
