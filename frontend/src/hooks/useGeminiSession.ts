@@ -12,11 +12,12 @@ const API_BASE = WS_URL.replace(/^wss?:\/\//, "https://").replace("/ws", "");
 
 export { API_BASE };
 
-// Global mic stream ref — for killing from button handlers
+// Global refs for killing media from any context
 let _globalMicStream: MediaStream | null = null;
+let _globalWs: WebSocket | null = null;
 
 export function killAllMedia() {
-  // Kill mic stream tracks
+  // Kill global mic stream
   if (_globalMicStream) {
     _globalMicStream.getTracks().forEach(t => t.stop());
     _globalMicStream = null;
@@ -30,6 +31,12 @@ export function killAllMedia() {
       }
     });
   } catch {}
+  // Send end_session and close WebSocket
+  if (_globalWs && _globalWs.readyState === WebSocket.OPEN) {
+    try { _globalWs.send(JSON.stringify({ type: "end_session" })); } catch {}
+    _globalWs.close();
+    _globalWs = null;
+  }
 }
 
 export function useGeminiSession() {
@@ -190,6 +197,7 @@ export function useGeminiSession() {
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
+    _globalWs = ws;
 
     ws.onopen = () => ws.send(JSON.stringify({
       type: "config",
@@ -366,12 +374,15 @@ export function useGeminiSession() {
 
   // ── Disconnect ────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
-    // Close WebSocket FIRST to stop new audio arriving
+    // Kill all media via global refs (works even after navigation)
+    killAllMedia();
+    // Also try local refs
     if (wsRef.current) {
       try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
       wsRef.current.close();
       wsRef.current = null;
     }
+    _globalWs = null;
     // Stop mic immediately
     stopMic();
     stopCamera();
