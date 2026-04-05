@@ -91,6 +91,29 @@ class ToolDispatcher:
             matches = await self.catalog.match_from_vision(result["candidates"])
             result["catalog_matches"] = matches
 
+        # Compare with current cart items — tell the agent what's compatible
+        if self.cart and customer_id:
+            cart = await self.cart.get_cart(customer_id)
+            cart_items = cart.get("items", [])
+            if cart_items:
+                cart_analysis = []
+                plant_name = result.get("candidates", [{}])[0].get("name", "this plant") if result.get("candidates") else "this plant"
+                for item in cart_items:
+                    name = item.get("name", "")
+                    # Check if cart items are suitable for the identified plant
+                    if any(kw in name.lower() for kw in ["potting", "soil", "mix"]):
+                        if "premium" in name.lower() or "bloom" in name.lower():
+                            cart_analysis.append({"item": name, "verdict": "good", "reason": f"Good choice for {plant_name}"})
+                        else:
+                            cart_analysis.append({"item": name, "verdict": "could_improve", "reason": f"This is basic soil. {plant_name} would thrive better with premium potting mix"})
+                    elif any(kw in name.lower() for kw in ["fertilizer", "feed"]):
+                        if "flower" in name.lower() or "bloom" in name.lower():
+                            cart_analysis.append({"item": name, "verdict": "good", "reason": f"Great fertilizer choice for {plant_name}"})
+                        else:
+                            cart_analysis.append({"item": name, "verdict": "could_improve", "reason": f"A flowering-specific fertilizer would be better for {plant_name}"})
+                result["cart_comparison"] = cart_analysis
+                result["cart_items_count"] = len(cart_items)
+
         return result
 
     # ── 2. Recommend products ────────────────────────────────────────────────

@@ -209,6 +209,7 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef  = useRef<HTMLInputElement>(null);
   const [textInput, setTextInput] = useState("");
+  const [showCameraPrompt, setShowCameraPrompt] = useState(false);
 
 
   const isConnected  = store.sessionStatus === "connected";
@@ -228,10 +229,22 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const handleCameraToggle = useCallback(async () => {
     if (store.isCameraActive) {
       session.stopCamera();
-    } else if (videoRef.current) {
-      await session.startCamera(videoRef.current);
+      setShowCameraPrompt(false);
+    } else {
+      setShowCameraPrompt(true);
     }
   }, [session, store.isCameraActive]);
+
+  const handleCameraAccept = useCallback(async () => {
+    setShowCameraPrompt(false);
+    if (videoRef.current) {
+      await session.startCamera(videoRef.current);
+    }
+  }, [session]);
+
+  const handleCameraDecline = useCallback(() => {
+    setShowCameraPrompt(false);
+  }, []);
 
   const handleImageUpload = useCallback(() => {
     fileRef.current?.click();
@@ -331,11 +344,17 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
             </div>
           </div>
 
-          {/* Camera preview */}
+          {/* Camera preview with stop button */}
           {store.isCameraActive && (
             <div className="px-5 pb-3">
-              <div className="rounded-xl overflow-hidden">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-36 object-cover" />
+              <div className="rounded-xl overflow-hidden relative">
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-44 object-cover" />
+                <button
+                  onClick={() => { session.stopCamera(); setShowCameraPrompt(false); }}
+                  className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors"
+                >
+                  <Camera size={12} /> Stop sharing video
+                </button>
               </div>
             </div>
           )}
@@ -343,6 +362,29 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
 
           {/* Main content — action cards */}
           <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+
+            {/* Camera permission prompt */}
+            {showCameraPrompt && !store.isCameraActive && (
+              <div className="animate-fade-up space-y-4 py-4">
+                <div className="flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-xl border-2 border-white/20 flex items-center justify-center">
+                    <Camera size={24} className="text-white/60" />
+                  </div>
+                </div>
+                <p className="text-white font-semibold text-center text-sm">
+                  Would like to access your camera for video call?
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={handleCameraDecline} className="flex-1 py-3 rounded-full border-2 border-white/40 text-white font-semibold text-sm hover:bg-white/10 transition-colors">
+                    No
+                  </button>
+                  <button onClick={handleCameraAccept} className="flex-1 py-3 rounded-full bg-[#4db876] text-white font-semibold text-sm hover:bg-[#3da866] transition-colors">
+                    Yes
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Show transcript toggle */}
             {store.showTranscript && store.transcript.length > 0 && (
               <div className="space-y-2 mb-4">
