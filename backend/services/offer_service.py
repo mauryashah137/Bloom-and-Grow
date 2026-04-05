@@ -20,8 +20,8 @@ ACTIVE_OFFERS = {
     },
     "SPRING20": {
         "discount_pct": 20, "description": "Spring Sale — 20% off everything",
-        "min_order": 50, "valid_tiers": ["Standard", "Silver", "Gold", "Platinum"],
-        "max_uses": 1, "expires_at": "2026-04-30", "stackable": False,
+        "min_order": 0, "valid_tiers": ["Standard", "Silver", "Gold", "Platinum"],
+        "max_uses": 999, "expires_at": "2026-12-31", "stackable": False,
     },
     "GREENUP": {
         "discount_pct": 5, "description": "5% loyalty reward",
