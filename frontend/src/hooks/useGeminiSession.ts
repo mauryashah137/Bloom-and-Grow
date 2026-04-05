@@ -259,11 +259,12 @@ export function useGeminiSession() {
           break;
 
         case "navigate":
-          // Navigate to a page on the website
+          // Navigate to a page — minimize the agent panel first
           if (ev.page) {
             const routes: Record<string, string> = { cart: "/cart", checkout: "/checkout", shop: "/shop", orders: "/orders", support: "/support", home: "/" };
             const route = routes[ev.page];
             if (route && typeof window !== "undefined") {
+              store.setAgentPanelMinimized(true);
               window.location.href = route;
             }
           }
@@ -335,6 +336,16 @@ export function useGeminiSession() {
     stopMic();
     stopCamera();
     stopPlayback();
+    // Close playback AudioContext to immediately stop all sound
+    if (playCtxRef.current && playCtxRef.current.state !== "closed") {
+      try { playCtxRef.current.close(); } catch {}
+      playCtxRef.current = null;
+    }
+    // Close recording AudioContext
+    if (recCtxRef.current && recCtxRef.current.state !== "closed") {
+      try { recCtxRef.current.close(); } catch {}
+      recCtxRef.current = null;
+    }
     if (wsRef.current) {
       try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
       wsRef.current.close();

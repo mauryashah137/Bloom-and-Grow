@@ -164,23 +164,45 @@ class ToolDispatcher:
         qty = args.get("qty", 1)
 
         # Validate product exists
+        product_name = pid
         if pid and self.catalog:
             product = await self.catalog.get(pid)
             if not product:
                 return {"error": f"Product '{pid}' not found in our catalog. Can I help you find the right product?"}
-            # Check stock
+            product_name = product.get("name", pid)
             stock = product.get("stock", 0)
             if stock <= 0:
-                return {"error": f"Sorry, {product['name']} is currently out of stock."}
+                return {"error": f"Sorry, {product_name} is currently out of stock."}
             if qty > stock:
-                return {"error": f"We only have {stock} units of {product['name']} in stock. Would you like to add {stock} instead?"}
+                return {"error": f"We only have {stock} units of {product_name} in stock. Would you like to add {stock} instead?"}
+
+        # Check if item already in cart — report existing quantity
+        existing_qty = 0
+        if self.cart:
+            cart = await self.cart.get_cart(cid)
+            for item in cart.get("items", []):
+                if item.get("product_id") == pid:
+                    existing_qty = item.get("qty", 0)
+                    break
 
         if self.cart:
-            return await self.cart.add_item(cid, pid, qty)
-        cm = ctx.get("cart_manager")
-        if cm:
-            return await cm.add_item(cid, pid, qty)
-        return {"error": "Cart service unavailable"}
+            result = await self.cart.add_item(cid, pid, qty)
+        elif ctx.get("cart_manager"):
+            result = await ctx["cart_manager"].add_item(cid, pid, qty)
+        else:
+            return {"error": "Cart service unavailable"}
+
+        # Add info about existing quantity for the agent to communicate
+        if existing_qty > 0:
+            result["already_in_cart"] = True
+            result["previous_qty"] = existing_qty
+            result["new_total_qty"] = existing_qty + qty
+            result["message"] = f"{product_name} was already in the cart ({existing_qty}x). Now updated to {existing_qty + qty}x."
+        else:
+            result["already_in_cart"] = False
+            result["message"] = f"Added {qty}x {product_name} to the cart."
+
+        return result
 
     # ── 5. Remove from cart ──────────────────────────────────────────────────
     async def _t_remove_from_cart(self, args, **ctx):

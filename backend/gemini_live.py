@@ -69,10 +69,10 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "add_to_cart": types.FunctionDeclaration(
         name="add_to_cart",
-        description="Add a product to the cart. ONLY call this AFTER the customer has explicitly said yes to adding it. Never call without customer confirmation.",
+        description="Add a product to the cart. ONLY call AFTER the customer confirms. Ask them how many they want first. The result tells you if the item was already in the cart and the total quantity. If already_in_cart is true, tell the customer: 'You already had X in your cart, I've updated it to Y total.'",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_id"], properties={
             "product_id": types.Schema(type=types.Type.STRING),
-            "qty": types.Schema(type=types.Type.INTEGER, description="Quantity, default 1"),
+            "qty": types.Schema(type=types.Type.INTEGER, description="How many to add. ASK the customer for quantity before calling."),
         }),
     ),
     "remove_from_cart": types.FunctionDeclaration(
