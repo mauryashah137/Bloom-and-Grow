@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useStore } from "@/store";
+import { killAllMedia } from "@/hooks/useGeminiSession";
 import { Search, ShoppingCart, User, ChevronDown } from "lucide-react";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { CartDrawer } from "@/components/shop/CartDrawer";
@@ -18,6 +19,16 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
   const router = useRouter();
   const cartCount = store.cart?.items?.length ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Global cleanup — kill ALL media when panel closes or minimizes
+  useEffect(() => {
+    if (!store.agentPanelOpen || store.agentPanelMinimized) {
+      killAllMedia();
+      store.setMicActive(false);
+      store.setCameraActive(false);
+      store.setAgentSpeaking(false);
+    }
+  }, [store.agentPanelOpen, store.agentPanelMinimized]);
 
   // Handle navigation requests from the chatbot — uses router.push (no page reload)
   useEffect(() => {

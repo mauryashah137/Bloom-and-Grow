@@ -12,6 +12,25 @@ const API_BASE = WS_URL.replace(/^wss?:\/\//, "https://").replace("/ws", "");
 
 export { API_BASE };
 
+// Global reference to active mic stream — allows killing from anywhere
+let _globalMicStream: MediaStream | null = null;
+export function killAllMedia() {
+  // Kill mic
+  if (_globalMicStream) {
+    _globalMicStream.getTracks().forEach(t => t.stop());
+    _globalMicStream = null;
+  }
+  // Kill all video elements
+  try {
+    document.querySelectorAll("video").forEach((v) => {
+      if (v.srcObject) {
+        (v.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        v.srcObject = null;
+      }
+    });
+  } catch {}
+}
+
 export function useGeminiSession() {
   const wsRef        = useRef<WebSocket | null>(null);
   // Playback (24kHz)
@@ -101,6 +120,7 @@ export function useGeminiSession() {
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     micStreamRef.current = stream;
+    _globalMicStream = stream; // Track globally for emergency kill
 
     if (!recCtxRef.current || recCtxRef.current.state === "closed") {
       recCtxRef.current = new AudioContext({ sampleRate: 16000 });
@@ -151,6 +171,7 @@ export function useGeminiSession() {
     recWorkletRef.current = null;
     micStreamRef.current?.getTracks().forEach(t => t.stop());
     micStreamRef.current = null;
+    _globalMicStream = null;
     store.setMicActive(false);
   }, [store]);
 
