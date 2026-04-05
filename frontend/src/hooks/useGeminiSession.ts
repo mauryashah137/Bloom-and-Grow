@@ -12,28 +12,16 @@ const API_BASE = WS_URL.replace(/^wss?:\/\//, "https://").replace("/ws", "");
 
 export { API_BASE };
 
-// Global references — allows killing from anywhere regardless of React lifecycle
+// Global mic stream ref — for killing from button handlers
 let _globalMicStream: MediaStream | null = null;
-let _globalRecCtx: AudioContext | null = null;
-let _globalPlayCtx: AudioContext | null = null;
 
 export function killAllMedia() {
-  // Kill mic stream
+  // Kill mic stream tracks
   if (_globalMicStream) {
     _globalMicStream.getTracks().forEach(t => t.stop());
     _globalMicStream = null;
   }
-  // Kill recording context (stops mic processing)
-  if (_globalRecCtx && _globalRecCtx.state !== "closed") {
-    try { _globalRecCtx.close(); } catch {}
-    _globalRecCtx = null;
-  }
-  // Kill playback context (stops all audio output)
-  if (_globalPlayCtx && _globalPlayCtx.state !== "closed") {
-    try { _globalPlayCtx.close(); } catch {}
-    _globalPlayCtx = null;
-  }
-  // Kill all video elements on the page
+  // Kill all video element streams
   try {
     document.querySelectorAll("video").forEach((v) => {
       if (v.srcObject) {
@@ -75,7 +63,6 @@ export function useGeminiSession() {
     }
     const ctx = new AudioContext({ sampleRate: 24000 });
     playCtxRef.current = ctx;
-    _globalPlayCtx = ctx;
     nextPlayTime.current = ctx.currentTime;
   }, []);
 
@@ -138,7 +125,6 @@ export function useGeminiSession() {
 
     if (!recCtxRef.current || recCtxRef.current.state === "closed") {
       recCtxRef.current = new AudioContext({ sampleRate: 16000 });
-      _globalRecCtx = recCtxRef.current;
     }
     const ctx = recCtxRef.current;
     if (ctx.state === "suspended") await ctx.resume();

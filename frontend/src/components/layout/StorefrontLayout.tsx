@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useStore } from "@/store";
-import { killAllMedia } from "@/hooks/useGeminiSession";
 import { Search, ShoppingCart, User, ChevronDown } from "lucide-react";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { CartDrawer } from "@/components/shop/CartDrawer";
@@ -20,26 +19,6 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
   const cartCount = store.cart?.items?.length ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Global cleanup — subscribe directly to store changes (works across all pages)
-  useEffect(() => {
-    const unsub = useStore.subscribe((state, prev) => {
-      // Panel just closed
-      if (prev.agentPanelOpen && !state.agentPanelOpen) {
-        killAllMedia();
-        state.setMicActive(false);
-        state.setCameraActive(false);
-        state.setAgentSpeaking(false);
-      }
-      // Panel just minimized
-      if (!prev.agentPanelMinimized && state.agentPanelMinimized) {
-        killAllMedia();
-        state.setMicActive(false);
-        state.setCameraActive(false);
-        state.setAgentSpeaking(false);
-      }
-    });
-    return () => unsub();
-  }, []);
 
   // Handle navigation requests from the chatbot — uses router.push (no page reload)
   useEffect(() => {

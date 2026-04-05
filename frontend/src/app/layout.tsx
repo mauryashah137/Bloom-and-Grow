@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { CartClearer } from "@/components/CartClearer";
-import { GlobalMediaGuard } from "@/components/GlobalMediaGuard";
 
 export const metadata: Metadata = {
   title: "Bloom & Grow — Garden & Home",
@@ -18,7 +17,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full">
         <CartClearer />
-        <GlobalMediaGuard />
         {children}
       </body>
     </html>

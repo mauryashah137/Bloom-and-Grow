@@ -2,7 +2,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useStore } from "@/store";
 import type { AgentActionCard, Product } from "@/lib/types";
-import { useGeminiSession } from "@/hooks/useGeminiSession";
+import { useGeminiSession, killAllMedia } from "@/hooks/useGeminiSession";
 
 // Strip markdown formatting (* ** _ etc.) for clean voice transcript display
 function cleanText(text: string): string {
@@ -243,24 +243,9 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   }, [store, session]);
 
   const handleEndCall = useCallback(() => {
-    // Nuclear kill — stop ALL media tracks on the page
-    try {
-      navigator.mediaDevices.enumerateDevices().then(() => {
-        // Stop every active media track (mic + camera)
-        const tracks = [...(document.querySelectorAll("video") as any)].flatMap(
-          (v: HTMLVideoElement) => v.srcObject ? (v.srcObject as MediaStream).getTracks() : []
-        );
-        tracks.forEach(t => t.stop());
-      });
-    } catch {}
-    session.stopMic();
-    session.stopCamera();
-    session.stopPlayback();
+    killAllMedia();
     session.disconnect();
     store.setAgentPanelOpen(false);
-    store.setMicActive(false);
-    store.setCameraActive(false);
-    store.setAgentSpeaking(false);
     setShowCameraPrompt(false);
     setUploadedImage(null);
     setAnalyzing(false);
@@ -400,19 +385,10 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
               const willMinimize = !store.agentPanelMinimized;
               store.setAgentPanelMinimized(willMinimize);
               if (willMinimize) {
-                // Nuclear kill all media on minimize
-                try {
-                  [...(document.querySelectorAll("video") as any)].forEach((v: HTMLVideoElement) => {
-                    if (v.srcObject) (v.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-                    v.srcObject = null;
-                  });
-                } catch {}
+                killAllMedia();
                 session.stopMic();
                 session.stopCamera();
                 session.stopPlayback();
-                store.setMicActive(false);
-                store.setCameraActive(false);
-                store.setAgentSpeaking(false);
                 setShowCameraPrompt(false);
                 setUploadedImage(null);
                 setAnalyzing(false);
