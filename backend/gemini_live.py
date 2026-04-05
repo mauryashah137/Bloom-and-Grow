@@ -69,17 +69,17 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "add_to_cart": types.FunctionDeclaration(
         name="add_to_cart",
-        description="Add a product to the cart. ONLY call AFTER the customer confirms. Ask them how many they want first. The result tells you if the item was already in the cart and the total quantity. If already_in_cart is true, tell the customer: 'You already had X in your cart, I've updated it to Y total.'",
+        description="Add a product to the cart. You can pass either the product ID (like P001) or the product name (like 'Monstera Deliciosa'). ONLY call AFTER the customer confirms. Ask quantity first. The result tells you if already in cart.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_id"], properties={
-            "product_id": types.Schema(type=types.Type.STRING),
-            "qty": types.Schema(type=types.Type.INTEGER, description="How many to add. ASK the customer for quantity before calling."),
+            "product_id": types.Schema(type=types.Type.STRING, description="Product ID (e.g. P001) or product name (e.g. 'Monstera Deliciosa')"),
+            "qty": types.Schema(type=types.Type.INTEGER, description="How many to add. Ask customer first."),
         }),
     ),
     "remove_from_cart": types.FunctionDeclaration(
         name="remove_from_cart",
-        description="Remove a product from the cart. Only call after the customer confirms they want it removed.",
+        description="Remove a product from the cart. You can pass product ID or name. Only call after customer confirms.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["product_id"], properties={
-            "product_id": types.Schema(type=types.Type.STRING),
+            "product_id": types.Schema(type=types.Type.STRING, description="Product ID or name"),
         }),
     ),
     "apply_offer": types.FunctionDeclaration(

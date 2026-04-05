@@ -160,15 +160,24 @@ class ToolDispatcher:
     async def _t_add_to_cart(self, args, **ctx):
         """Add a product to the customer's shopping cart."""
         cid = ctx.get("customer_id")
-        pid = args.get("product_id")
+        pid = args.get("product_id", "")
         qty = args.get("qty", 1)
 
-        # Validate product exists
+        # Validate product exists — also try searching by name if ID not found
         product_name = pid
+        product = None
         if pid and self.catalog:
             product = await self.catalog.get(pid)
             if not product:
-                return {"error": f"Product '{pid}' not found in our catalog. Can I help you find the right product?"}
+                # Try searching by name (Gemini often sends product name instead of ID)
+                catalog = ctx.get("catalog")
+                if catalog:
+                    results = await catalog.search(query=pid, limit=1)
+                    if results:
+                        product = results[0]
+                        pid = product["id"]  # Use the found product's actual ID
+            if not product:
+                return {"error": f"I couldn't find '{pid}' in our catalog. Could you be more specific or let me search for it?"}
             product_name = product.get("name", pid)
             stock = product.get("stock", 0)
             if stock <= 0:
@@ -208,11 +217,30 @@ class ToolDispatcher:
     async def _t_remove_from_cart(self, args, **ctx):
         """Remove a product from the customer's cart."""
         cid = ctx.get("customer_id")
+        pid = args.get("product_id", "")
+
+        # Try to find by name if ID doesn't match a cart item
         if self.cart:
-            return await self.cart.remove_item(cid, args["product_id"])
+            cart = await self.cart.get_cart(cid)
+            cart_ids = [i["product_id"] for i in cart.get("items", [])]
+            if pid not in cart_ids:
+                # Search by name in cart items
+                for item in cart.get("items", []):
+                    if pid.lower() in item.get("name", "").lower():
+                        pid = item["product_id"]
+                        break
+                else:
+                    # Try catalog search
+                    catalog = ctx.get("catalog")
+                    if catalog:
+                        results = await catalog.search(query=pid, limit=1)
+                        if results and results[0]["id"] in cart_ids:
+                            pid = results[0]["id"]
+
+            return await self.cart.remove_item(cid, pid)
         cm = ctx.get("cart_manager")
         if cm:
-            return await cm.remove_item(cid, args["product_id"])
+            return await cm.remove_item(cid, pid)
         return {"error": "Cart service unavailable"}
 
     # ── 6. Apply offer ───────────────────────────────────────────────────────
