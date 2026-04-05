@@ -12,8 +12,11 @@ const API = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws")
 const MOCK_GALLERY_IMAGES = ["🌿", "👩‍🌾", "🌱"];
 
 export default function ProductPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const resolvedParams = use(params);
+  const id = resolvedParams?.id;
+
   const [product, setProduct] = useState<Product | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [complementary, setComplementary] = useState<Product[]>([]);
   const [qty, setQty] = useState(1);
   const [galleryIdx, setGalleryIdx] = useState(0);
@@ -22,15 +25,27 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   const store = useStore();
 
   useEffect(() => {
+    if (!id) {
+      setNotFound(true);
+      return;
+    }
     fetch(`${API}/api/products/${id}`)
-      .then(r => r.ok ? r.json() : null)
+      .then(r => {
+        if (!r.ok) {
+          setNotFound(true);
+          return null;
+        }
+        return r.json();
+      })
       .then(d => {
         if (d) {
           setProduct(d);
           if (d.complementary_products) setComplementary(d.complementary_products);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setNotFound(true);
+      });
   }, [id]);
 
   const addToCart = async () => {
@@ -44,15 +59,34 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
       });
       if (r.ok) {
         const d = await r.json();
-        // Handle response: cart may be in d.cart or d itself
         const cart = d.cart || d;
         if (cart.items) store.setCart(cart);
       }
-    } catch {}
+    } catch {
+      // silently handle cart errors
+    }
     setAdding(false);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
+
+  if (notFound) {
+    return (
+      <StorefrontLayout>
+        <div className="max-w-7xl mx-auto px-6 py-16 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Product not found</h1>
+          <p className="text-gray-500 mb-6">The product you are looking for does not exist or has been removed.</p>
+          <Link
+            href="/shop"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-white font-semibold transition-all hover:opacity-90"
+            style={{ background: "var(--green-700)" }}
+          >
+            Back to Shop
+          </Link>
+        </div>
+      </StorefrontLayout>
+    );
+  }
 
   if (!product) {
     return (
@@ -65,6 +99,8 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
   }
 
   const price = product.sale_price ?? product.price;
+  const reviewCount = product.review_count ?? 0;
+  const rating = product.rating ?? 0;
 
   return (
     <StorefrontLayout>
@@ -108,16 +144,16 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
               <div className="flex items-center gap-2 mt-3">
                 <div className="flex">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} size={16} className={i < Math.round(product.rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"} />
+                    <Star key={i} size={16} className={i < Math.round(rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"} />
                   ))}
                 </div>
-                <span className="text-sm text-gray-500">({product.review_count.toLocaleString()} reviews)</span>
+                <span className="text-sm text-gray-500">({reviewCount.toLocaleString()} reviews)</span>
               </div>
             </div>
 
             <div className="flex items-baseline gap-3">
               <span className="text-2xl font-bold text-gray-900">${price.toFixed(2)}</span>
-              {product.sale_price && <span className="text-lg text-gray-400 line-through">${product.price.toFixed(2)}</span>}
+              {product.sale_price != null && <span className="text-lg text-gray-400 line-through">${product.price.toFixed(2)}</span>}
             </div>
 
             <div>
@@ -126,7 +162,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             </div>
 
             {/* Stock status */}
-            {product.stock !== undefined && (
+            {product.stock !== undefined && product.stock !== null && (
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${product.stock > 5 ? "bg-green-500" : product.stock > 0 ? "bg-yellow-500" : "bg-red-500"}`} />
                 <span className="text-sm text-gray-600">
@@ -136,7 +172,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             )}
 
             {/* Care info */}
-            {product.care && (
+            {product.care && Object.keys(product.care).length > 0 && (
               <div className="grid grid-cols-3 gap-3">
                 {Object.entries(product.care).map(([k, v]) => (
                   <div key={k} className="bg-green-50 rounded-xl p-3 text-center">
@@ -148,7 +184,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
             )}
 
             {/* Tags */}
-            {product.tags?.length > 0 && (
+            {product.tags && product.tags.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {product.tags.map(tag => (
                   <span key={tag} className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-600">{tag}</span>
@@ -164,7 +200,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                 className="flex-1 py-4 rounded-xl text-white font-semibold text-base transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-70"
                 style={{ background: "var(--green-900)" }}
               >
-                {added ? "✓ Added!" : adding ? "Adding…" : "Add to Cart"}
+                {added ? "Added!" : adding ? "Adding..." : "Add to Cart"}
               </button>
               <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-3 py-3">
                 <button onClick={() => setQty(q => Math.max(1, q - 1))} className="text-gray-500 hover:text-gray-700"><Minus size={14} /></button>

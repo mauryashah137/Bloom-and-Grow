@@ -40,9 +40,9 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
               <ChevronDown size={14} className="text-gray-500" />
             </div>
             <Link href="/shop?filter=sale" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Sale</Link>
-            <Link href="/orders" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Orders</Link>
+            <Link href="/care" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Plant Care</Link>
+            <Link href="/services" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Services</Link>
             <Link href="/support" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Support</Link>
-            <Link href="/manager" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Manager</Link>
           </nav>
 
           {/* Right icons */}
@@ -73,13 +73,21 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
         {/* ── Category chips (from screenshots) */}
         <div className="border-t border-gray-50 bg-white">
           <div className="max-w-7xl mx-auto px-6 h-11 flex items-center gap-6 overflow-x-auto">
-            {["House plants", "Seeds + Bulbs", "Garden tools", "Best Sellers", "New Arrivals", "Soil & Fertilizers", "Pots & Planters"].map(cat => (
+            {[
+              { label: "House Plants", href: "/shop?category=plants" },
+              { label: "Tools & Accessories", href: "/shop?category=tools" },
+              { label: "Plant Care Guides", href: "/care" },
+              { label: "Landscaping Services", href: "/services" },
+              { label: "Best Sellers", href: "/shop" },
+              { label: "Orders", href: "/orders" },
+              { label: "Manager", href: "/manager" },
+            ].map(item => (
               <Link
-                key={cat}
-                href={`/shop?category=${encodeURIComponent(cat)}`}
+                key={item.label}
+                href={item.href}
                 className="text-sm text-gray-600 hover:text-green-700 whitespace-nowrap transition-colors"
               >
-                {cat}
+                {item.label}
               </Link>
             ))}
           </div>

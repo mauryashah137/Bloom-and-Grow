@@ -524,6 +524,28 @@ async def list_handoffs():
 async def list_bookings(customer_id: str):
     return {"bookings": await booking_service.list_customer_bookings(customer_id)}
 
+@app.post("/api/services/book")
+async def book_service_form(body: dict):
+    """Book a service from the website form."""
+    service_type = body.get("service_type", "consultation")
+    customer_id = body.get("email") or body.get("name", "web_form_customer")
+    result = await booking_service.create_booking(
+        customer_id=customer_id,
+        service_type=service_type,
+        preferred_date=body.get("preferred_date"),
+        preferred_time=body.get("preferred_time"),
+        notes=body.get("notes", ""),
+    )
+    if result.get("error"):
+        return result
+    # Include contact info in response
+    result["contact"] = {
+        "name": body.get("name"),
+        "email": body.get("email"),
+        "phone": body.get("phone"),
+    }
+    return result
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # REST — Customer

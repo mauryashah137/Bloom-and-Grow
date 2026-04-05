@@ -20,14 +20,14 @@ const CATEGORIES = [
   },
   {
     name: "Plant care\nand maintenance",
-    href: "/shop?category=plant-care",
+    href: "/care",
     image: "🌱",
     bg: "bg-green-100",
     imgStyle: { background: "linear-gradient(135deg, #d4edda 0%, #a8d5b5 100%)" },
   },
   {
     name: "Landscaping\nservices",
-    href: "/shop?category=services",
+    href: "/services",
     image: "🏡",
     bg: "bg-stone-200",
     imgStyle: { background: "linear-gradient(135deg, #e8e0d0 0%, #d4c8b0 100%)" },

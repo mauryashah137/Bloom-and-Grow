@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { StorefrontLayout } from "@/components/layout/StorefrontLayout";
 import { useStore } from "@/store";
@@ -10,23 +10,44 @@ import { Star } from "lucide-react";
 const API = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws")
   .replace(/^wss?:\/\//, "https://").replace("/ws", "");
 
-const CATEGORIES = ["All", "House plants", "Plants & Supplies", "Tools", "Soil", "Fertilizers", "Pots", "Accessories", "Decor"];
+const ALL_CATEGORIES = ["All", "House plants", "Plants & Supplies", "Tools", "Soil", "Fertilizers", "Pots", "Accessories", "Decor"];
+
+const TOOLS_CATEGORIES = ["All", "Tools", "Lighting", "Accessories"];
+const PLANTS_CATEGORIES = ["All", "House Plants", "Soil", "Fertilizers", "Pots", "Bundles"];
+
+const TOOLS_CATALOG = ["tools", "lighting", "accessories"];
+const PLANTS_CATALOG = ["plants", "soil", "fertilizers", "pots", "bundles"];
+
 const EMOJI_MAP: Record<string, string> = {
   plants:"🌿", soil:"🌍", fertilizers:"🌸", pots:"🏺",
   tools:"🔧", accessories:"✨", decor:"🎍", bundles:"🎁",
-  default:"🌱",
+  lighting:"💡", default:"🌱",
 };
 
 function ShopContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("All");
   const searchParams = useSearchParams();
   const store        = useStore();
 
+  const urlCategory = searchParams.get("category") || "";
+
+  // Determine which filter pills to show based on URL category
+  const filterList = useMemo(() => {
+    if (urlCategory === "tools") return TOOLS_CATEGORIES;
+    if (urlCategory === "plants") return PLANTS_CATEGORIES;
+    return ALL_CATEGORIES;
+  }, [urlCategory]);
+
+  // Reset active filter when URL category changes
+  useEffect(() => {
+    setActiveFilter("All");
+  }, [urlCategory]);
+
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/api/products?limit=20`)
+    fetch(`${API}/api/products?limit=50`)
       .then(r => r.ok ? r.json() : { products: [] })
       .then(d => { setProducts(d.products || []); setLoading(false); })
       .catch(() => setLoading(false));
@@ -44,24 +65,40 @@ function ShopContent() {
     }
   };
 
-  const filtered = activeCategory === "All"
-    ? products
-    : products.filter(p => p.category.toLowerCase().includes(activeCategory.toLowerCase()) || p.tags?.some(t => t.toLowerCase().includes(activeCategory.toLowerCase())));
+  // First, filter by URL category param (broad category group)
+  const categoryFiltered = useMemo(() => {
+    if (urlCategory === "tools") {
+      return products.filter(p => TOOLS_CATALOG.includes(p.category.toLowerCase()));
+    }
+    if (urlCategory === "plants") {
+      return products.filter(p => PLANTS_CATALOG.includes(p.category.toLowerCase()));
+    }
+    return products;
+  }, [products, urlCategory]);
+
+  // Then, filter by the active pill filter
+  const filtered = useMemo(() => {
+    if (activeFilter === "All") return categoryFiltered;
+    return categoryFiltered.filter(p =>
+      p.category.toLowerCase().includes(activeFilter.toLowerCase()) ||
+      p.tags?.some(t => t.toLowerCase().includes(activeFilter.toLowerCase()))
+    );
+  }, [categoryFiltered, activeFilter]);
 
   return (
     <StorefrontLayout>
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center gap-3 mb-8 overflow-x-auto pb-1">
-          {CATEGORIES.map(cat => (
+          {filterList.map(cat => (
             <button
               key={cat}
-              onClick={() => setActiveCategory(cat)}
+              onClick={() => setActiveFilter(cat)}
               className={`px-5 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                activeCategory === cat
+                activeFilter === cat
                   ? "text-white shadow-sm"
                   : "bg-white border border-gray-200 text-gray-700 hover:border-green-400"
               }`}
-              style={activeCategory === cat ? { background: "var(--green-900)" } : {}}
+              style={activeFilter === cat ? { background: "var(--green-900)" } : {}}
             >
               {cat}
             </button>
@@ -73,6 +110,11 @@ function ShopContent() {
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl h-64 animate-pulse" />
             ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-gray-500">
+            <p className="text-lg">No products found in this category.</p>
+            <Link href="/shop" className="text-green-700 underline mt-2 inline-block">View all products</Link>
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-6">
@@ -106,7 +148,7 @@ function ProductCard({ product, onAddToCart }: { product: Product; onAddToCart: 
           {Array.from({ length: 5 }).map((_, i) => (
             <Star key={i} size={11} className={i < Math.round(product.rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"} />
           ))}
-          <span className="text-[10px] text-gray-400 ml-1">({product.review_count})</span>
+          <span className="text-[10px] text-gray-400 ml-1">({product.review_count ?? 0})</span>
         </div>
         <Link href={`/product/${product.id}`}>
           <p className="text-sm font-semibold text-gray-900 leading-tight hover:text-green-700 transition-colors">{product.name}</p>
