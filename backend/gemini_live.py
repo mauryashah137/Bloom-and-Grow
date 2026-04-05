@@ -263,22 +263,19 @@ class GeminiLiveSession:
                 if self._closed:
                     break
 
-                # ── Audio data — use response.data (primary), fall back to inline_data
-                # IMPORTANT: Only send ONE source to avoid double/stuttered playback
-                audio_sent = False
+                # ── Audio data — check both sources ─────────────────────
                 if response.data:
                     await self._queue.put({
                         "type": "audio_chunk",
                         "data": base64.b64encode(response.data).decode(),
                     })
-                    audio_sent = True
 
                 # ── Server content ───────────────────────────────────────
                 if response.server_content:
                     sc = response.server_content
 
-                    # Inline audio — only if response.data didn't have it
-                    if not audio_sent and sc.model_turn and sc.model_turn.parts:
+                    # Inline audio in model turn
+                    if sc.model_turn and sc.model_turn.parts:
                         for part in sc.model_turn.parts:
                             if part.inline_data and part.inline_data.data:
                                 await self._queue.put({
