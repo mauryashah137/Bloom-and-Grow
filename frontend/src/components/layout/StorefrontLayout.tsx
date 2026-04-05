@@ -1,9 +1,11 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/store";
 import { Search, ShoppingCart, User, ChevronDown } from "lucide-react";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { CartDrawer } from "@/components/shop/CartDrawer";
+import { SearchOverlay } from "@/components/shop/SearchOverlay";
 import { useRouter } from "next/navigation";
 
 interface StorefrontLayoutProps {
@@ -15,6 +17,7 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
   const store  = useStore();
   const router = useRouter();
   const cartCount = store.cart?.items?.length ?? 0;
+  const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--cream)" }}>
@@ -48,7 +51,7 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
 
           {/* Right icons */}
           <div className="flex items-center gap-3">
-            <button className="p-2 text-gray-600 hover:text-green-700 transition-colors">
+            <button onClick={() => setSearchOpen(true)} className="p-2 text-gray-600 hover:text-green-700 transition-colors">
               <Search size={20} />
             </button>
             <button
@@ -65,7 +68,7 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
                 </span>
               )}
             </button>
-            <button className="p-2 text-gray-600 hover:text-green-700 transition-colors">
+            <button onClick={() => router.push("/profile")} className="p-2 text-gray-600 hover:text-green-700 transition-colors">
               <User size={20} />
             </button>
           </div>
@@ -105,6 +108,9 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
 
       {/* ── Cart drawer ────────────────────────────────────────────────── */}
       {store.showCart && <CartDrawer onClose={() => store.setShowCart(false)} />}
+
+      {/* ── Search overlay ─────────────────────────────────────────────── */}
+      <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

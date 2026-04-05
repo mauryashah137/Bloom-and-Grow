@@ -69,6 +69,48 @@ class SessionStore:
                 pass
         return c
 
+    async def get_user_by_email(self, email: str) -> dict:
+        """Look up a user by email address."""
+        email = email.lower().strip()
+        # Check memory first
+        for k, v in _MEM.items():
+            if k.startswith("cust:") and v.get("email", "").lower() == email:
+                return v
+        # Check Firestore
+        if USE_FS:
+            try:
+                from google.cloud.firestore_v1.base_query import FieldFilter
+                q = _db.collection("customers").where(filter=FieldFilter("email", "==", email)).limit(1)
+                async for doc in q.stream():
+                    user = doc.to_dict()
+                    _MEM[f"cust:{user.get('customer_id', doc.id)}"] = user
+                    return user
+            except Exception as e:
+                logger.error(f"User lookup by email: {e}")
+                # Fallback to old-style query
+                try:
+                    q = _db.collection("customers").where("email", "==", email).limit(1)
+                    async for doc in q.stream():
+                        user = doc.to_dict()
+                        _MEM[f"cust:{user.get('customer_id', doc.id)}"] = user
+                        return user
+                except:
+                    pass
+        return None
+
+    async def create_user(self, data: dict) -> dict:
+        """Create a new user account."""
+        import uuid as _uuid
+        user_id = f"user_{_uuid.uuid4().hex[:10]}"
+        data["customer_id"] = user_id
+        _MEM[f"cust:{user_id}"] = data
+        if USE_FS:
+            try:
+                await _db.collection("customers").document(user_id).set(data)
+            except Exception as e:
+                logger.error(f"Create user: {e}")
+        return data
+
     async def update_customer(self, customer_id: str, updates: dict):
         c = await self.get_or_create_customer(customer_id)
         c.update(updates)

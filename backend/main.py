@@ -567,6 +567,126 @@ async def get_customer(customer_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# REST — Search
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.get("/api/search")
+async def search_products(q: str = "", limit: int = 20):
+    """Search products. If no exact matches, return similar products."""
+    if not q.strip():
+        return {"products": [], "query": q, "similar": False}
+
+    results = await catalog.search(query=q.strip(), limit=limit)
+    if results:
+        return {"products": [
+            {k: v for k, v in p.items() if k != "complementary_products"} for p in results
+        ], "query": q, "similar": False}
+
+    # No exact match — find similar products by searching individual words
+    similar = []
+    seen = set()
+    for word in q.strip().split():
+        if len(word) > 2:
+            matches = await catalog.search(query=word, limit=5)
+            for m in matches:
+                if m["id"] not in seen:
+                    seen.add(m["id"])
+                    similar.append({k: v for k, v in m.items() if k != "complementary_products"})
+
+    # If still nothing, return top rated products
+    if not similar:
+        all_products = await catalog.search(limit=8)
+        similar = [{k: v for k, v in p.items() if k != "complementary_products"} for p in all_products]
+
+    return {"products": similar[:limit], "query": q, "similar": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REST — Auth (Registration + Login with Firestore)
+# ═══════════════════════════════════════════════════════════════════════════════
+import hashlib
+
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+@app.post("/api/auth/register")
+async def register(body: dict):
+    """Register a new user account."""
+    name = body.get("name", "").strip()
+    email = body.get("email", "").strip().lower()
+    password = body.get("password", "")
+    phone = body.get("phone", "").strip()
+
+    if not name or not email or not password:
+        return {"success": False, "error": "Name, email, and password are required."}
+    if len(password) < 6:
+        return {"success": False, "error": "Password must be at least 6 characters."}
+    if "@" not in email:
+        return {"success": False, "error": "Please enter a valid email address."}
+
+    # Check if user already exists
+    existing = await session_store.get_user_by_email(email)
+    if existing:
+        return {"success": False, "error": "An account with this email already exists. Please sign in."}
+
+    # Create user
+    user = await session_store.create_user({
+        "name": name,
+        "email": email,
+        "password_hash": _hash_password(password),
+        "phone": phone,
+        "loyalty_tier": "Standard",
+        "loyalty_points": 0,
+        "total_orders": 0,
+        "member_since": time.strftime("%Y-%m-%d"),
+        "preferences": {"skill_level": "beginner", "garden_type": "indoor", "budget_range": "medium"},
+    })
+
+    return {"success": True, "user": {k: v for k, v in user.items() if k != "password_hash"}}
+
+@app.post("/api/auth/login")
+async def login(body: dict):
+    """Login with email and password."""
+    email = body.get("email", "").strip().lower()
+    password = body.get("password", "")
+
+    if not email or not password:
+        return {"success": False, "error": "Email and password are required."}
+
+    user = await session_store.get_user_by_email(email)
+    if not user:
+        return {"success": False, "error": "No account found with this email."}
+
+    if user.get("password_hash") != _hash_password(password):
+        return {"success": False, "error": "Incorrect password."}
+
+    return {"success": True, "user": {k: v for k, v in user.items() if k != "password_hash"}}
+
+@app.get("/api/auth/profile/{user_id}")
+async def get_profile(user_id: str):
+    """Get user profile with orders, cart, and bookings."""
+    user = await session_store.get_or_create_customer(user_id)
+    orders = await order_service.list_customer_orders(user_id, limit=10)
+    cart = await cart_service.get_cart(user_id)
+    bookings = await booking_service.list_customer_bookings(user_id)
+    return {
+        "user": {k: v for k, v in user.items() if k != "password_hash"},
+        "orders": orders,
+        "cart": cart,
+        "bookings": bookings,
+    }
+
+@app.put("/api/auth/profile/{user_id}")
+async def update_profile(user_id: str, body: dict):
+    """Update user profile."""
+    allowed = {"name", "phone", "preferences"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if updates:
+        await session_store.update_customer(user_id, updates)
+    user = await session_store.get_or_create_customer(user_id)
+    return {"success": True, "user": {k: v for k, v in user.items() if k != "password_hash"}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PERSONA BUILDER — Mode-aware with tool gating
 # ═══════════════════════════════════════════════════════════════════════════════
 def build_persona(mode: str, customer: dict, cart: dict, orders: list = None) -> str:
