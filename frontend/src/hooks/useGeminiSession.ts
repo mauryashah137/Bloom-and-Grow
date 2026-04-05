@@ -316,21 +316,21 @@ export function useGeminiSession() {
 
   // ── Camera ────────────────────────────────────────────────────────────
   const startCamera = useCallback(async (videoEl: HTMLVideoElement) => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 480, facingMode: "user" } });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 320, facingMode: "user" } });
     cameraRef.current = stream;
     videoEl.srcObject = stream;
     await videoEl.play();
     if (!canvasRef.current) canvasRef.current = document.createElement("canvas");
     const canvas = canvasRef.current;
-    canvas.width = 480; canvas.height = 480;
+    canvas.width = 320; canvas.height = 320;
     store.setCameraActive(true);
-    // Send frames every 2s — less bandwidth, faster response
+    // Send frames every 1.5s — fast enough for identification
     camIntervalRef.current = setInterval(() => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
       const ctx2d = canvas.getContext("2d");
       if (!ctx2d) return;
-      ctx2d.drawImage(videoEl, 0, 0, 480, 480);
-      const b64 = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+      ctx2d.drawImage(videoEl, 0, 0, 320, 320);
+      const b64 = canvas.toDataURL("image/jpeg", 0.5).split(",")[1];
       wsRef.current.send(JSON.stringify({ type: "video_frame", data: b64 }));
     }, 2000);
   }, [store]);

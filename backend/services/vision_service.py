@@ -50,7 +50,7 @@ class VisionService:
             image_bytes = base64.b64decode(image_b64)
 
             response = await client.aio.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",  # Faster model for vision
                 contents=[
                     types.Content(role="user", parts=[
                         types.Part(inline_data=types.Blob(
@@ -94,60 +94,15 @@ class VisionService:
             return self._fallback_identification(context)
 
     def _build_vision_prompt(self, context: str, preferences: dict = None) -> str:
-        pref_text = ""
-        if preferences:
-            pref_text = f"""
-Customer preferences:
-- Skill level: {preferences.get('skill_level', 'unknown')}
-- Garden type: {preferences.get('garden_type', 'unknown')}
-- Budget range: {preferences.get('budget_range', 'unknown')}
-"""
-        return f"""You are a vision system for Bloom & Grow, a garden and home retail store. ONLY identify plants, flowers, garden tools, soil, pots, fertilizers, and garden-related products.
+        ctx = f'Customer said: "{context}"' if context else ''
+        return f"""Identify the plant or garden product in this image for a garden store.
+{ctx}
 
-{f'Customer said: "{context}"' if context else ''}
-{pref_text}
+Focus on plants/flowers/garden items. Ignore people/furniture unless NO garden item is visible.
+If no plant visible, set category to "not_garden_related".
 
-CRITICAL RULES:
-- FOCUS ON PLANTS AND GARDEN ITEMS: If there is ANY plant, flower, or garden product visible in the image — even if there are also people, furniture, or other things — identify the plant/garden item. Ignore the non-garden items.
-- Only set category to "not_garden_related" if there are ZERO plants or garden items visible anywhere in the frame.
-- If you see a person HOLDING a plant, identify the plant, not the person.
-- If you see a plant on a desk with a laptop, identify the plant, ignore the laptop.
-- If there are ONLY non-garden items (just a person's face, just furniture, etc.): then set category to "not_garden_related" and ask to see a plant.
-- If the image is blurry, dark, or unclear: set confidence low and ask for a clearer photo
-- If you see a DAMAGED product (broken pot, torn bag, dead plant): note the damage in health_assessment
-- If you see MULTIPLE plants: identify each one in separate candidates
-- If you see PESTS (bugs, webs, spots on leaves): set issue_detected appropriately
-- If you see a PRODUCT LABEL or packaging: read the label and identify the product
-
-Return a JSON object with this exact structure:
-{{
-    "candidates": [
-        {{
-            "name": "Common name of the plant/product",
-            "scientific_name": "Scientific name if applicable",
-            "confidence": 0.0 to 1.0,
-            "category": "houseplant|outdoor_plant|succulent|flowering|tool|soil|pot|fertilizer|pest_control|decor|damaged|other",
-            "description": "Brief description of what was identified",
-            "is_damaged": false,
-            "damage_description": "Description of damage if any"
-        }}
-    ],
-    "health_assessment": {{
-        "status": "healthy|minor_issues|needs_attention|critical|damaged|dead",
-        "observations": ["list of specific observations about condition"],
-        "recommendations": ["list of actionable care or repair recommendations"]
-    }},
-    "issue_detected": "none|overwatering|underwatering|pest_infestation|nutrient_deficiency|sunburn|root_rot|physical_damage|shipping_damage|mold|fungal|other",
-    "image_quality": "good|blurry|dark|partial|too_far|no_subject",
-    "multiple_items": false,
-    "ideal_soil_type": "well-draining|moisture-retaining|acidic|alkaline|sandy|general-purpose",
-    "ideal_fertilizer": "balanced|flowering|foliage|succulent|organic|none-needed",
-    "light_needs": "bright-direct|bright-indirect|medium|low-light|full-sun",
-    "next_question": "A helpful follow-up question to ask the customer",
-    "care_tips": ["list of relevant care tips"]
-}}
-
-Be specific and accurate. If uncertain, lower the confidence score. Always provide a helpful next_question."""
+Return compact JSON:
+{{"candidates":[{{"name":"common name","confidence":0.0-1.0,"category":"houseplant|flowering|succulent|tool|soil|pot|not_garden_related","description":"brief"}}],"health_assessment":{{"status":"healthy|needs_attention|damaged","observations":[],"recommendations":[]}},"issue_detected":"none|pest_infestation|overwatering|other","ideal_soil_type":"well-draining|moisture-retaining|general-purpose","ideal_fertilizer":"balanced|flowering|foliage","next_question":"helpful follow-up","care_tips":[]}}"""
 
     def _normalize_result(self, result: dict) -> dict:
         """Ensure all expected fields are present."""
