@@ -91,7 +91,7 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "request_discount_approval": types.FunctionDeclaration(
         name="request_discount_approval",
-        description="Send a discount request to the manager for approval. Use when the customer asks for a discount above your authorized limit. Tell the customer you are checking with your supervisor and wait for the result.",
+        description="Escalate a discount request to the manager. Use ONLY when: 1) Customer asks for more than 20% off, 2) Customer wants additional discount on top of SPRING20, 3) Customer wants to stack discounts. For discounts up to 20%, use apply_offer with code SPRING20 instead. Tell the customer you're checking with your supervisor and WAIT for the result.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["discount_pct", "reason"], properties={
             "discount_pct": types.Schema(type=types.Type.NUMBER, description="Discount percentage"),
             "reason": types.Schema(type=types.Type.STRING, description="Why the customer wants this discount"),
