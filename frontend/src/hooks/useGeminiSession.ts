@@ -14,10 +14,9 @@ export { API_BASE };
 
 export function useGeminiSession() {
   const wsRef        = useRef<WebSocket | null>(null);
-  // Playback (24kHz) — simple buffer source scheduling
+  // Playback (24kHz) — ring buffer worklet
   const playCtxRef   = useRef<AudioContext | null>(null);
-  const nextPlayTime = useRef<number>(0);
-  const playingNodes = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const playerRef    = useRef<AudioWorkletNode | null>(null);
   // Recording (16kHz)
   const recCtxRef    = useRef<AudioContext | null>(null);
   const recWorkletRef = useRef<AudioWorkletNode | null>(null);
@@ -31,7 +30,36 @@ export function useGeminiSession() {
 
   const store = useStore();
 
-  // ── Ensure playback AudioContext (24kHz) ──────────────────────────────
+  // ── Inline ring buffer worklet (no external file dependency) ───────────
+  const PLAYER_WORKLET_CODE = `
+class P extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buf = new Float32Array(24000 * 120);
+    this.w = 0;
+    this.r = 0;
+    this.port.onmessage = (e) => {
+      if (e.data && e.data.command === "clear") { this.r = this.w; return; }
+      const i16 = new Int16Array(e.data);
+      for (let i = 0; i < i16.length; i++) {
+        this.buf[this.w] = i16[i] / 32768;
+        this.w = (this.w + 1) % this.buf.length;
+        if (this.w === this.r) this.r = (this.r + 1) % this.buf.length;
+      }
+    };
+  }
+  process(_, outputs) {
+    const o = outputs[0][0];
+    for (let i = 0; i < o.length; i++) {
+      o[i] = this.buf[this.r];
+      if (this.r !== this.w) this.r = (this.r + 1) % this.buf.length;
+    }
+    return true;
+  }
+}
+registerProcessor("pcm-player", P);
+`;
+
   const ensurePlayback = useCallback(async () => {
     if (playCtxRef.current && playCtxRef.current.state !== "closed") {
       if (playCtxRef.current.state === "suspended") await playCtxRef.current.resume();
@@ -39,67 +67,45 @@ export function useGeminiSession() {
     }
     const ctx = new AudioContext({ sampleRate: 24000 });
     playCtxRef.current = ctx;
-    nextPlayTime.current = ctx.currentTime;
-    console.log(`[Playback] AudioContext created, state=${ctx.state}, sampleRate=${ctx.sampleRate}`);
+
+    // Create worklet from inline code via Blob URL
+    const blob = new Blob([PLAYER_WORKLET_CODE], { type: "application/javascript" });
+    const url = URL.createObjectURL(blob);
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+
+    const node = new AudioWorkletNode(ctx, "pcm-player");
+    node.connect(ctx.destination);
+    playerRef.current = node;
   }, []);
 
-  // ── Play PCM audio chunk — simple, reliable scheduling ────────────────
+  // ── Play audio chunk — sends to ring buffer worklet ───────────────────
+  const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const playChunk = useCallback((b64: string) => {
     const ctx = playCtxRef.current;
-    if (!ctx) { console.warn("[Playback] No AudioContext"); return; }
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    // Resume if suspended (browser autoplay policy)
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
+    const player = playerRef.current;
+    if (!player) return;
 
-    // Decode base64 → bytes → Int16 → Float32
+    // Decode base64 → raw bytes
     const raw = atob(b64);
-    const len = raw.length;
-    if (len < 2) return;
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
 
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
+    // Post to ring buffer worklet — it handles Int16→Float32 conversion internally
+    player.port.postMessage(bytes.buffer);
 
-    const i16 = new Int16Array(bytes.buffer);
-    const f32 = new Float32Array(i16.length);
-    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
-
-    // Create buffer and schedule playback
-    const buf = ctx.createBuffer(1, f32.length, 24000);
-    buf.copyToChannel(f32, 0);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-
-    const now = ctx.currentTime;
-    // If we've fallen too far behind (>2s), reset to now to avoid delayed playback
-    if (nextPlayTime.current < now - 2) {
-      nextPlayTime.current = now;
-    }
-    const startAt = Math.max(nextPlayTime.current, now);
-    src.start(startAt);
-    nextPlayTime.current = startAt + buf.duration;
-
-    playingNodes.current.add(src);
     store.setAgentSpeaking(true);
-
-    src.onended = () => {
-      playingNodes.current.delete(src);
-      if (playingNodes.current.size === 0) {
-        // Small delay to check if more chunks are coming
-        setTimeout(() => {
-          if (playingNodes.current.size === 0) store.setAgentSpeaking(false);
-        }, 300);
-      }
-    };
+    if (speakingTimer.current) clearTimeout(speakingTimer.current);
+    speakingTimer.current = setTimeout(() => store.setAgentSpeaking(false), 600);
   }, [store]);
 
   // ── Stop playback ─────────────────────────────────────────────────────
   const stopPlayback = useCallback(() => {
-    playingNodes.current.forEach(src => { try { src.stop(); } catch {} });
-    playingNodes.current.clear();
-    if (playCtxRef.current) nextPlayTime.current = playCtxRef.current.currentTime;
+    playerRef.current?.port.postMessage({ command: "clear" });
     store.setAgentSpeaking(false);
   }, [store]);
 
