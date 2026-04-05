@@ -263,18 +263,46 @@ class GeminiLiveSession:
                 if self._closed:
                     break
 
+                # ── Audio: collect from both sources, send the one with data ──
+                audio_a = None  # from response.data
+                audio_b = None  # from inline_data
+                try:
+                    if response.data:
+                        raw = bytes(response.data) if not isinstance(response.data, bytes) else response.data
+                        if len(raw) > 0:
+                            audio_a = raw
+                except Exception:
+                    pass
+
+                if response.server_content and response.server_content.model_turn:
+                    for part in response.server_content.model_turn.parts:
+                        try:
+                            if part.inline_data and part.inline_data.data:
+                                raw = bytes(part.inline_data.data) if not isinstance(part.inline_data.data, bytes) else part.inline_data.data
+                                if len(raw) > 0:
+                                    audio_b = raw
+                                    break
+                        except Exception:
+                            pass
+
+                # Send whichever has data (prefer larger if both exist)
+                audio_to_send = None
+                if audio_a and audio_b:
+                    audio_to_send = audio_a if len(audio_a) >= len(audio_b) else audio_b
+                elif audio_a:
+                    audio_to_send = audio_a
+                elif audio_b:
+                    audio_to_send = audio_b
+
+                if audio_to_send:
+                    await self._queue.put({
+                        "type": "audio_chunk",
+                        "data": base64.b64encode(audio_to_send).decode(),
+                    })
+
                 # ── Server content ───────────────────────────────────────
                 if response.server_content:
                     sc = response.server_content
-
-                    # Audio from model turn inline_data (primary reliable source)
-                    if sc.model_turn and sc.model_turn.parts:
-                        for part in sc.model_turn.parts:
-                            if part.inline_data and part.inline_data.data:
-                                await self._queue.put({
-                                    "type": "audio_chunk",
-                                    "data": base64.b64encode(part.inline_data.data).decode(),
-                                })
 
                     # Interruption signal — user started speaking
                     if sc.interrupted:
