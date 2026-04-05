@@ -15,13 +15,24 @@ class PricingService:
         """Compute all pricing fields for a cart."""
         items = cart.get("items", [])
         subtotal = sum(i["price"] * i["qty"] for i in items)
-        discount_pct = cart.get("discount_pct", 0)
+
+        # Empty cart = everything zero
+        if not items or subtotal == 0:
+            cart["subtotal"] = 0
+            cart["discount_amount"] = 0
+            cart["tax"] = 0
+            cart["shipping"] = 0
+            cart["total"] = 0
+            cart["free_shipping_eligible"] = False
+            return cart
+
+        discount_pct = min(max(cart.get("discount_pct", 0), 0), 100)
         discount_amount = round(subtotal * discount_pct / 100, 2)
 
-        taxable = subtotal - discount_amount
+        taxable = max(subtotal - discount_amount, 0)
         tax = round(taxable * TAX_RATE, 2)
 
-        # Free shipping over threshold
+        # Free shipping over threshold, or pickup
         shipping = 0 if subtotal >= FREE_SHIPPING_THRESHOLD else DELIVERY_FEE
         if cart.get("shipping_method") == "pickup":
             shipping = 0
