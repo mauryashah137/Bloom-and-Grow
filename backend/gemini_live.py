@@ -575,10 +575,12 @@ class GeminiLiveSession:
         """Send a one-shot uploaded image."""
         if self._session and not self._closed:
             self._last_image = {"data": b64, "mime": mime_type}
+            img_bytes = base64.b64decode(b64)
+            logger.info(f"[{self.session_id}] Image uploaded: {len(img_bytes)} bytes, {mime_type}")
             await self._session.send(input=types.LiveClientContent(
                 turns=[types.Content(role="user", parts=[
-                    types.Part(inline_data=types.Blob(data=base64.b64decode(b64), mime_type=mime_type)),
-                    types.Part(text="I just uploaded an image. Please analyze it."),
+                    types.Part(inline_data=types.Blob(data=img_bytes, mime_type=mime_type)),
+                    types.Part(text="The customer just uploaded an image. Please identify what is shown and help them."),
                 ])],
                 turn_complete=True,
             ))

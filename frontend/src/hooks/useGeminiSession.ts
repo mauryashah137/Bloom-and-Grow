@@ -368,11 +368,27 @@ export function useGeminiSession() {
   }, [store, stopMic, stopCamera, stopPlayback]);
 
   const sendImage = useCallback((file: File) => {
+    // Resize image to 512x512 before sending — prevents WebSocket choking on large photos
+    const img = new Image();
     const reader = new FileReader();
     reader.onload = (ev) => {
-      if (!ev.target?.result || !wsRef.current) return;
-      const b64 = (ev.target.result as string).split(",")[1];
-      wsRef.current.send(JSON.stringify({ type: "image_upload", data: b64, mime_type: file.type }));
+      if (!ev.target?.result) return;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const size = 512;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx || !wsRef.current) return;
+        // Center-crop and resize
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        const b64 = canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
+        wsRef.current.send(JSON.stringify({ type: "image_upload", data: b64, mime_type: "image/jpeg" }));
+      };
+      img.src = ev.target.result as string;
     };
     reader.readAsDataURL(file);
   }, []);
