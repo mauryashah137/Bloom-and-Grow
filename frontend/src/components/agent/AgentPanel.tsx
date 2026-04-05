@@ -215,11 +215,27 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const fileRef  = useRef<HTMLInputElement>(null);
   const [textInput, setTextInput] = useState("");
   const [showCameraPrompt, setShowCameraPrompt] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
 
   const isConnected  = store.sessionStatus === "connected";
   const isConnecting = store.sessionStatus === "connecting";
   const latestCard = store.actionCards[store.actionCards.length - 1] || null;
+
+  // Clear analyzing indicator when vision result arrives or agent speaks
+  useEffect(() => {
+    if (store.visionResult || (latestCard && latestCard.type === "vision")) {
+      setAnalyzing(false);
+    }
+  }, [store.visionResult, latestCard]);
+
+  // Also clear when agent starts speaking (response received)
+  useEffect(() => {
+    if (store.agentSpeaking && analyzing) {
+      setAnalyzing(false);
+    }
+  }, [store.agentSpeaking, analyzing]);
 
   const handleStartCall = useCallback(async () => {
     store.setAgentPanelOpen(true);
@@ -267,9 +283,32 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) session.sendImage(file);
+    if (!file) return;
+
+    // Validate image type
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/heic"];
+    if (!validTypes.includes(file.type) && !file.type.startsWith("image/")) {
+      store.addActionCard({ id: `err-${Date.now()}`, type: "text", message: "Please upload an image file (JPEG, PNG, WebP).", ts: Date.now() / 1000 });
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        setUploadedImage(ev.target.result as string);
+        setAnalyzing(true);
+        // Clear analyzing after 10s max (in case no response)
+        setTimeout(() => setAnalyzing(false), 10000);
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // Send to backend
+    session.sendImage(file);
     if (fileRef.current) fileRef.current.value = "";
-  }, [session]);
+  }, [session, store]);
 
   const handleSendText = useCallback(() => {
     if (!textInput.trim()) return;
@@ -287,7 +326,7 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   if (!store.agentPanelOpen) {
     return (
       <>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic" className="hidden" onChange={handleFileChange} />
         <button
           onClick={handleStartCall}
           className="fixed bottom-6 right-6 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl z-50 transition-transform hover:scale-105 active:scale-95 orb-pulse"
@@ -311,7 +350,7 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
 
   return (
     <div className="fixed top-0 right-0 h-full w-96 flex flex-col shadow-2xl z-40" style={{ background: "var(--green-900)" }}>
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/heic" className="hidden" onChange={handleFileChange} />
 
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10">
@@ -378,6 +417,26 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
 
           {/* Main content — action cards */}
           <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+
+            {/* Uploaded image preview */}
+            {uploadedImage && (
+              <div className="animate-fade-up space-y-2">
+                <div className="rounded-xl overflow-hidden relative">
+                  <img src={uploadedImage} alt="Uploaded" className="w-full h-40 object-cover rounded-xl" />
+                  {analyzing && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-xl">
+                      <div className="flex items-center gap-2 bg-black/60 px-4 py-2 rounded-full">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full spin" />
+                        <span className="text-white text-xs font-medium">Analyzing...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => { setUploadedImage(null); setAnalyzing(false); }} className="text-white/40 text-xs hover:text-white/60 transition-colors">
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             {/* Camera permission prompt */}
             {showCameraPrompt && !store.isCameraActive && (
