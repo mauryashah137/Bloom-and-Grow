@@ -14,9 +14,8 @@ export { API_BASE };
 
 export function useGeminiSession() {
   const wsRef        = useRef<WebSocket | null>(null);
-  // Playback (24kHz) — ring buffer worklet
+  // Playback (24kHz)
   const playCtxRef   = useRef<AudioContext | null>(null);
-  const playerRef    = useRef<AudioWorkletNode | null>(null);
   // Recording (16kHz)
   const recCtxRef    = useRef<AudioContext | null>(null);
   const recWorkletRef = useRef<AudioWorkletNode | null>(null);
@@ -30,39 +29,10 @@ export function useGeminiSession() {
 
   const store = useStore();
 
-  // ── Inline ring buffer worklet — receives Float32 arrays ───────────────
-  const PLAYER_CODE = `
-class R extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.b = new Float32Array(24000 * 120);
-    this.w = 0;
-    this.r = 0;
-    this.port.onmessage = (e) => {
-      if (e.data && e.data.command === "clear") { this.r = this.w; return; }
-      const f = new Float32Array(e.data);
-      for (let i = 0; i < f.length; i++) {
-        this.b[this.w] = f[i];
-        this.w = (this.w + 1) % this.b.length;
-        if (this.w === this.r) this.r = (this.r + 1) % this.b.length;
-      }
-    };
-  }
-  process(_, o) {
-    const ch = o[0][0];
-    for (let i = 0; i < ch.length; i++) {
-      ch[i] = this.b[this.r];
-      if (this.r !== this.w) this.r = (this.r + 1) % this.b.length;
-    }
-    return true;
-  }
-}
-registerProcessor("rp", R);
-`;
-
-  const useWorkletRef = useRef(false);
-  const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Playback using AudioBufferSourceNode (proven to produce sound) ─────
   const nextPlayTime = useRef<number>(0);
+  const lastChunkId = useRef<string>("");
+  const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ensurePlayback = useCallback(async () => {
     if (playCtxRef.current && playCtxRef.current.state !== "closed") {
@@ -72,68 +42,49 @@ registerProcessor("rp", R);
     const ctx = new AudioContext({ sampleRate: 24000 });
     playCtxRef.current = ctx;
     nextPlayTime.current = ctx.currentTime;
-
-    // Try inline worklet — falls back to AudioBufferSourceNode if it fails
-    try {
-      const blob = new Blob([PLAYER_CODE], { type: "application/javascript" });
-      const blobUrl = URL.createObjectURL(blob);
-      await ctx.audioWorklet.addModule(blobUrl);
-      URL.revokeObjectURL(blobUrl);
-      const node = new AudioWorkletNode(ctx, "rp");
-      node.connect(ctx.destination);
-      playerRef.current = node;
-      useWorkletRef.current = true;
-      console.log("[Audio] Ring buffer worklet loaded");
-    } catch (e) {
-      console.warn("[Audio] Worklet failed, using fallback:", e);
-      useWorkletRef.current = false;
-    }
   }, []);
 
-  // ── Play audio chunk ──────────────────────────────────────────────────
   const playChunk = useCallback((b64: string) => {
     const ctx = playCtxRef.current;
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    // Decode base64 → bytes → Int16 → Float32 (on main thread for reliability)
+    // Deduplicate — skip if identical to last chunk
+    if (b64 === lastChunkId.current) return;
+    lastChunkId.current = b64;
+
+    // Decode base64 → Int16 → Float32
     const raw = atob(b64);
     const len = raw.length;
     if (len < 2) return;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
-    // Ensure even length for Int16
     const evenLen = len - (len % 2);
     const i16 = new Int16Array(bytes.buffer, 0, evenLen / 2);
     const f32 = new Float32Array(i16.length);
     for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
 
-    if (useWorkletRef.current && playerRef.current) {
-      // Ring buffer worklet — no stuttering possible
-      playerRef.current.port.postMessage(f32.buffer);
-    } else {
-      // Fallback: AudioBufferSourceNode scheduling
-      const buf = ctx.createBuffer(1, f32.length, 24000);
-      buf.copyToChannel(f32, 0);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(ctx.destination);
-      const now = ctx.currentTime;
-      if (nextPlayTime.current < now - 0.5) nextPlayTime.current = now;
-      src.start(Math.max(nextPlayTime.current, now));
-      nextPlayTime.current = Math.max(nextPlayTime.current, now) + buf.duration;
-    }
+    const buf = ctx.createBuffer(1, f32.length, 24000);
+    buf.copyToChannel(f32, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    // Reset if fallen behind
+    if (nextPlayTime.current < now - 0.3) nextPlayTime.current = now;
+    const startAt = Math.max(nextPlayTime.current, now);
+    src.start(startAt);
+    nextPlayTime.current = startAt + buf.duration;
 
     store.setAgentSpeaking(true);
     if (speakingTimer.current) clearTimeout(speakingTimer.current);
-    speakingTimer.current = setTimeout(() => store.setAgentSpeaking(false), 600);
+    speakingTimer.current = setTimeout(() => store.setAgentSpeaking(false), 500);
   }, [store]);
 
-  // ── Stop playback ─────────────────────────────────────────────────────
   const stopPlayback = useCallback(() => {
-    if (useWorkletRef.current && playerRef.current) {
-      playerRef.current.port.postMessage({ command: "clear" });
-    }
+    if (playCtxRef.current) nextPlayTime.current = playCtxRef.current.currentTime;
+    lastChunkId.current = "";
     store.setAgentSpeaking(false);
   }, [store]);
 
