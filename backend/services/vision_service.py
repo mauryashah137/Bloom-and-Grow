@@ -108,10 +108,12 @@ Customer preferences:
 {pref_text}
 
 CRITICAL RULES:
-- If you see a HUMAN FACE or PERSON: set candidates to [{{"name":"Person detected","confidence":1.0,"category":"not_garden_related","description":"Please show me a plant, flower, or garden product instead."}}] and set next_question to "Could you show me a plant or garden product? I can help identify it!"
-- If you see FURNITURE, ELECTRONICS, FOOD, or other non-garden items: set category to "not_garden_related" and ask to see a plant/garden item
-- ONLY provide detailed identification for: plants, flowers, trees, shrubs, soil, fertilizer, pots, garden tools, seeds, pest control products, garden decor
-- If the image is blurry, dark, or unclear: set confidence very low and ask for a clearer photo
+- FOCUS ON PLANTS AND GARDEN ITEMS: If there is ANY plant, flower, or garden product visible in the image — even if there are also people, furniture, or other things — identify the plant/garden item. Ignore the non-garden items.
+- Only set category to "not_garden_related" if there are ZERO plants or garden items visible anywhere in the frame.
+- If you see a person HOLDING a plant, identify the plant, not the person.
+- If you see a plant on a desk with a laptop, identify the plant, ignore the laptop.
+- If there are ONLY non-garden items (just a person's face, just furniture, etc.): then set category to "not_garden_related" and ask to see a plant.
+- If the image is blurry, dark, or unclear: set confidence low and ask for a clearer photo
 - If you see a DAMAGED product (broken pot, torn bag, dead plant): note the damage in health_assessment
 - If you see MULTIPLE plants: identify each one in separate candidates
 - If you see PESTS (bugs, webs, spots on leaves): set issue_detected appropriately

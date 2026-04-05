@@ -32,7 +32,7 @@ SHOP_TOOLS = [
     "identify_plant_or_product", "recommend_products", "get_product_details",
     "add_to_cart", "remove_from_cart", "apply_offer",
     "request_discount_approval", "get_service_info", "schedule_service",
-    "send_care_guide", "navigate_page", "connect_to_human",
+    "send_care_guide", "navigate_page",
 ]
 
 SUPPORT_TOOLS = [

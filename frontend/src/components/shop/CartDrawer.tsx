@@ -63,12 +63,13 @@ export function CartDrawer({ onClose }: { onClose: () => void }) {
     setApplying(false);
   };
 
+  // Use backend-computed values — they are always correct
   const subtotal = cart?.subtotal ?? 0;
-  const tax      = cart?.tax ?? +(subtotal * 0.084).toFixed(2);
+  const tax = cart?.tax ?? 0;
   const discount = cart?.discount_pct ?? 0;
-  const discountAmt = cart?.discount_amount ?? +(subtotal * discount / 100).toFixed(2);
+  const discountAmt = cart?.discount_amount ?? 0;
   const shipping = cart?.shipping ?? 0;
-  const total    = cart?.total ?? +((subtotal - discountAmt + tax + shipping)).toFixed(2);
+  const total = cart?.total ?? 0;
 
   return (
     <>

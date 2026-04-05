@@ -82,8 +82,15 @@ export function useGeminiSession() {
     speakingTimer.current = setTimeout(() => store.setAgentSpeaking(false), 500);
   }, [store]);
 
-  const stopPlayback = useCallback(() => {
-    if (playCtxRef.current) nextPlayTime.current = playCtxRef.current.currentTime;
+  const stopPlayback = useCallback(async () => {
+    const ctx = playCtxRef.current;
+    if (ctx && ctx.state === "running") {
+      // Suspend stops all playing audio immediately
+      await ctx.suspend();
+      // Resume immediately so new audio can play when it arrives
+      await ctx.resume();
+      nextPlayTime.current = ctx.currentTime;
+    }
     lastChunkId.current = "";
     store.setAgentSpeaking(false);
   }, [store]);
