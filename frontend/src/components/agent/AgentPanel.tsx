@@ -302,7 +302,16 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => store.setAgentPanelMinimized(!store.agentPanelMinimized)}
+          <button onClick={() => {
+              const willMinimize = !store.agentPanelMinimized;
+              store.setAgentPanelMinimized(willMinimize);
+              // Mute mic when minimized, unmute when expanded
+              if (willMinimize && store.isMicActive) {
+                session.stopMic();
+              } else if (!willMinimize && !store.isMicActive && isConnected) {
+                session.startMic();
+              }
+            }}
             className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors">
             <Minus size={14} />
           </button>
