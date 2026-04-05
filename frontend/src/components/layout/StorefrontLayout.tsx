@@ -95,6 +95,7 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
               { label: "Plant Care", href: "/care" },
               { label: "Services", href: "/services" },
               { label: "Orders", href: "/orders" },
+              { label: "Manager", href: "/manager" },
             ].map(item => (
               <Link
                 key={item.label}
