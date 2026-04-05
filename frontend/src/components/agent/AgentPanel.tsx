@@ -126,20 +126,49 @@ function DiscountCard({ card }: { card: AgentActionCard }) {
   if (!dr) return null;
   const isPending = dr.status === "pending";
   const isApproved = dr.status === "approved";
+  const pct = dr.discount_pct || 0;
 
-  return (
-    <div className={`rounded-xl p-4 space-y-2 ${
-      isPending ? "bg-purple-500/10 border border-purple-500/20" :
-      isApproved ? "bg-green-500/10 border border-green-500/20" :
-      "bg-red-500/10 border border-red-500/20"
-    }`}>
-      <div className="flex items-center gap-2">
-        {isPending && <Clock size={14} className="text-purple-400" />}
-        {isApproved && <CheckCircle size={14} className="text-green-400" />}
-        {!isPending && !isApproved && <XCircle size={14} className="text-red-400" />}
-        <p className="text-white text-sm font-semibold">{card.title}</p>
+  if (isPending) {
+    return (
+      <div className="rounded-xl p-4 space-y-2 bg-purple-500/10 border border-purple-500/20">
+        <div className="flex items-center gap-2">
+          <Clock size={14} className="text-purple-400" />
+          <p className="text-white text-sm font-semibold">Checking with supervisor...</p>
+        </div>
+        <p className="text-white/70 text-xs">Requesting {pct}% discount — please wait</p>
       </div>
-      <p className="text-white/70 text-xs">{card.message}</p>
+    );
+  }
+
+  if (isApproved) {
+    return (
+      <div className="rounded-xl p-4 space-y-3 bg-green-500/10 border border-green-500/20">
+        <p className="text-white font-semibold text-center text-sm">Discount applied to service offerings</p>
+        <div className="bg-white/10 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#4db876] flex items-center justify-center shrink-0">
+            <CheckCircle size={18} className="text-white" />
+          </div>
+          <div className="flex-1">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#4db876] text-white font-bold">{pct}% off</span>
+            <p className="text-sm font-medium text-white mt-1">Landscaping service</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-white/40 line-through">${200}</p>
+            <p className="text-sm font-bold text-[#4db876]">${(200 * (1 - pct / 100)).toFixed(0)}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Rejected
+  return (
+    <div className="rounded-xl p-4 space-y-2 bg-red-500/10 border border-red-500/20">
+      <div className="flex items-center gap-2">
+        <XCircle size={14} className="text-red-400" />
+        <p className="text-white text-sm font-semibold">Discount not available</p>
+      </div>
+      <p className="text-white/70 text-xs">{cleanText(card.message || "")}</p>
     </div>
   );
 }

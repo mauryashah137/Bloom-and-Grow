@@ -493,6 +493,80 @@ async def approve_discount(request_id: str, body: dict = {}):
 async def reject_discount(request_id: str, body: dict = {}):
     return await approval_service.resolve(request_id, "reject", body.get("note", ""))
 
+# ── Email-friendly approval page (manager clicks link from email) ─────────
+from fastapi.responses import HTMLResponse
+
+@app.get("/api/manager/approve-email/{request_id}", response_class=HTMLResponse)
+async def approve_email_page(request_id: str):
+    """Render a simple HTML page for the manager to approve/reject from email."""
+    req = await approval_service.get_request(request_id)
+    if not req:
+        return HTMLResponse("<html><body><h2>Request not found or already resolved.</h2></body></html>")
+    if req.get("status") != "pending":
+        return HTMLResponse(f"<html><body><h2>This request has already been {req.get('status')}.</h2></body></html>")
+
+    pct = req.get("discount_pct", 0)
+    reason = req.get("reason", "")
+    customer = req.get("customer_id", "")
+    tier = req.get("customer_tier", "")
+
+    return HTMLResponse(f"""
+    <html>
+    <head><title>Discount Approval — Bloom & Grow</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {{ font-family: -apple-system, sans-serif; max-width: 500px; margin: 40px auto; padding: 20px; background: #f5f3ef; }}
+        .card {{ background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }}
+        h2 {{ color: #1a3c2b; margin-top: 0; }}
+        .info {{ background: #f0f9f4; border-radius: 8px; padding: 12px; margin: 16px 0; }}
+        .info p {{ margin: 4px 0; font-size: 14px; color: #333; }}
+        .actions {{ display: flex; gap: 12px; margin-top: 20px; }}
+        .btn {{ flex: 1; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; display: block; }}
+        .approve {{ background: #2d7a4a; color: white; }}
+        .reject {{ background: #dc2626; color: white; }}
+        .amend {{ background: #f5f3ef; color: #333; border: 2px solid #ddd; }}
+        input {{ width: 60px; padding: 8px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; text-align: center; }}
+        .done {{ text-align: center; padding: 40px; }}
+        .done h2 {{ color: #2d7a4a; }}
+    </style>
+    </head>
+    <body>
+    <div class="card" id="form">
+        <h2>🌿 Discount Approval Request</h2>
+        <div class="info">
+            <p><strong>Customer:</strong> {customer}</p>
+            <p><strong>Tier:</strong> {tier}</p>
+            <p><strong>Requested:</strong> {pct}% discount</p>
+            <p><strong>Reason:</strong> {reason}</p>
+        </div>
+        <p style="font-size:14px;color:#666;">You can approve the full amount, enter a different %, or reject.</p>
+        <div style="margin:16px 0;">
+            <label style="font-size:14px;color:#333;">Approve at: </label>
+            <input type="number" id="amt" value="{pct}" min="1" max="50"> %
+        </div>
+        <div class="actions">
+            <a class="btn approve" onclick="doAction('approve')">Approve</a>
+            <a class="btn reject" onclick="doAction('reject')">Reject</a>
+        </div>
+    </div>
+    <div class="done" id="done" style="display:none;">
+        <h2>✓ Done!</h2>
+        <p id="result"></p>
+        <p style="font-size:14px;color:#666;">The customer has been notified.</p>
+    </div>
+    <script>
+    async function doAction(action) {{
+        const amt = document.getElementById('amt').value;
+        const body = action === 'approve' ? {{note: 'Approved via email', amended_pct: Number(amt)}} : {{note: 'Rejected via email'}};
+        const r = await fetch('/api/manager/approvals/{request_id}/' + action, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(body)}});
+        document.getElementById('form').style.display = 'none';
+        document.getElementById('done').style.display = 'block';
+        document.getElementById('result').textContent = action === 'approve' ? 'Approved ' + amt + '% discount!' : 'Discount rejected.';
+    }}
+    </script>
+    </body></html>
+    """)
+
 @app.get("/api/manager/session/{session_id}/summary")
 async def get_session_summary(session_id: str):
     """Get rich session summary for manager console."""
