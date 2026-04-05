@@ -255,9 +255,13 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
       session.stopCamera();
       setShowCameraPrompt(false);
     } else {
+      // Clear previous state — fresh start
+      setUploadedImage(null);
+      setAnalyzing(false);
+      store.clearActionCards();
       setShowCameraPrompt(true);
     }
-  }, [session, store.isCameraActive]);
+  }, [session, store]);
 
   const handleCameraAccept = useCallback(async () => {
     setShowCameraPrompt(false);
@@ -296,13 +300,17 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
       return;
     }
 
+    // Clear previous state — fresh start for upload
+    if (store.isCameraActive) session.stopCamera();
+    setShowCameraPrompt(false);
+    store.clearActionCards();
+
     // Show preview
     const reader = new FileReader();
     reader.onload = (ev) => {
       if (ev.target?.result) {
         setUploadedImage(ev.target.result as string);
         setAnalyzing(true);
-        // Clear analyzing after 10s max (in case no response)
         setTimeout(() => setAnalyzing(false), 10000);
       }
     };
