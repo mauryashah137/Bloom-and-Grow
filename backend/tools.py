@@ -313,6 +313,19 @@ class ToolDispatcher:
             return await cm.remove_item(cid, pid)
         return {"error": "Cart service unavailable"}
 
+    # ── 5b. Remove discount ────────────────────────────────────────────────
+    async def _t_remove_discount(self, args, **ctx):
+        """Remove the current discount from the cart."""
+        cid = ctx.get("customer_id")
+        if self.cart:
+            result = await self.cart.remove_discount(cid)
+            if result.get("removed_code"):
+                result["message"] = f"Removed {result['removed_pct']}% discount ({result['removed_code']}) from your cart."
+            else:
+                result["message"] = "No discount was applied to remove."
+            return result
+        return {"error": "Cart service unavailable"}
+
     # ── 6. Apply offer ───────────────────────────────────────────────────────
     async def _t_apply_offer(self, args, **ctx):
         """Apply a promo code, discount, or loyalty reward."""

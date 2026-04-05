@@ -104,6 +104,20 @@ class CartService:
             cart = await self._pricing.compute_totals(cart)
         return {"success": True, "cart": cart}
 
+    async def remove_discount(self, customer_id: str) -> dict:
+        """Remove any discount/offer from the cart."""
+        cart = await self._cart.get_or_create(customer_id)
+        old_code = cart.get("offer_code")
+        old_pct = cart.get("discount_pct", 0)
+        cart["discount_pct"] = 0
+        cart["offer_code"] = None
+        cart["discount_reason"] = None
+        cart["updated_at"] = time.time()
+        await self._cart._save(customer_id, cart)
+        if self._pricing:
+            cart = await self._pricing.compute_totals(cart)
+        return {"success": True, "cart": cart, "removed_code": old_code, "removed_pct": old_pct}
+
     async def clear_cart(self, customer_id: str) -> dict:
         cart = await self._cart.get_or_create(customer_id)
         cart["items"] = []

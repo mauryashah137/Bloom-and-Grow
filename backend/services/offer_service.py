@@ -84,17 +84,13 @@ class OfferService:
                 "error": f"Minimum order of ${offer['min_order']:.2f} required for '{code}'. Your cart is ${cart_subtotal:.2f}.",
             }
 
-        # Check stacking — only one discount at a time
+        # One discount at a time — remove old before applying new
         if self._cart:
             cart = await self._cart.get_cart(customer_id)
             existing_code = cart.get("offer_code")
             existing_pct = cart.get("discount_pct", 0)
             if existing_code and existing_code != code and existing_pct > 0:
-                return {
-                    "success": False,
-                    "error": f"Only one discount can be applied at a time. You currently have '{existing_code}' ({existing_pct}% off). Would you like to replace it with '{code}'?",
-                        "current_code": existing_code,
-                    }
+                await self._cart.remove_discount(customer_id)
 
         # Apply
         if self._cart:

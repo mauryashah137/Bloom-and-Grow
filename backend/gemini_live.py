@@ -30,14 +30,14 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-live-2.5-flash-native-audio")
 # ── Tool declarations ─────────────────────────────────────────────────────────
 SHOP_TOOLS = [
     "identify_plant_or_product", "recommend_products", "get_product_details",
-    "add_to_cart", "remove_from_cart", "apply_offer",
+    "add_to_cart", "remove_from_cart", "apply_offer", "remove_discount",
     "request_discount_approval", "get_service_info", "schedule_service",
     "send_care_guide", "navigate_page",
 ]
 
 SUPPORT_TOOLS = [
     "get_order_status", "process_refund", "identify_plant_or_product",
-    "update_support_ticket", "send_follow_up_email", "apply_offer",
+    "update_support_ticket", "send_follow_up_email", "apply_offer", "remove_discount",
     "request_discount_approval", "get_service_info", "schedule_service",
     "send_care_guide", "navigate_page", "connect_to_human",
 ]
@@ -84,10 +84,15 @@ ALL_TOOL_DECLARATIONS = {
     ),
     "apply_offer": types.FunctionDeclaration(
         name="apply_offer",
-        description="Apply a promo code to the cart. ONLY call when the customer explicitly gives you a promo code to apply. Never call on greetings or without a specific code from the customer.",
+        description="Apply a promo code to the cart. This will REPLACE any existing discount. ONLY call when the customer explicitly gives you a code.",
         parameters=types.Schema(type=types.Type.OBJECT, required=["offer_code"], properties={
             "offer_code": types.Schema(type=types.Type.STRING),
         }),
+    ),
+    "remove_discount": types.FunctionDeclaration(
+        name="remove_discount",
+        description="Remove the current discount/promo code from the cart. Use when the customer asks to remove a discount or wants to clear it before applying a different one.",
+        parameters=types.Schema(type=types.Type.OBJECT, properties={}),
     ),
     "request_discount_approval": types.FunctionDeclaration(
         name="request_discount_approval",
@@ -440,7 +445,7 @@ class GeminiLiveSession:
         # ── Emit typed events ────────────────────────────────────────────
 
         # Cart updates
-        if name in ("add_to_cart", "remove_from_cart", "apply_offer") and status == "success":
+        if name in ("add_to_cart", "remove_from_cart", "apply_offer", "remove_discount") and status == "success":
             cart = result.get("cart")
             if not cart:
                 cart = await self.cart_manager.get_or_create(self.customer_id)

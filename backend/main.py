@@ -360,6 +360,11 @@ async def apply_offer(customer_id: str, body: dict):
         cart_subtotal=cart.get("subtotal", 0),
     )
 
+@app.post("/api/cart/{customer_id}/remove-discount")
+async def remove_discount(customer_id: str):
+    """Remove any active discount from the cart."""
+    return await cart_service.remove_discount(customer_id)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # REST — Checkout & Orders
