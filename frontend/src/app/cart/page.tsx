@@ -30,6 +30,20 @@ export default function CartPage() {
     }
   };
 
+  const updateQty = async (pid: string, qty: number) => {
+    if (qty <= 0) return remove(pid);
+    const r = await fetch(`${API}/api/cart/${store.customerId}/item/${pid}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qty }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const c = d.cart || d;
+      if (c.items) setCart(c);
+    }
+  };
+
   const subtotal = cart?.subtotal ?? 0;
   const tax = cart?.tax ?? 0;
   const discount = cart?.discount_pct ?? 0;
@@ -80,14 +94,15 @@ export default function CartPage() {
                       <Trash2 size={15} />
                     </button>
                     <div className="flex items-center border border-gray-200 rounded-lg">
-                      <button className="px-2.5 py-2 text-gray-500 hover:text-gray-700"><Minus size={12} /></button>
+                      <button onClick={() => updateQty(item.product_id, item.qty - 1)} className="px-2.5 py-2 text-gray-500 hover:text-gray-700"><Minus size={12} /></button>
                       <select
                         value={item.qty}
+                        onChange={e => updateQty(item.product_id, Number(e.target.value))}
                         className="bg-transparent border-none outline-none text-sm font-medium text-gray-900 cursor-pointer px-1 py-2"
                       >
-                        {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
-                      <button className="px-2.5 py-2 text-gray-500 hover:text-gray-700"><Plus size={12} /></button>
+                      <button onClick={() => updateQty(item.product_id, item.qty + 1)} className="px-2.5 py-2 text-gray-500 hover:text-gray-700"><Plus size={12} /></button>
                     </div>
                   </div>
                 </div>

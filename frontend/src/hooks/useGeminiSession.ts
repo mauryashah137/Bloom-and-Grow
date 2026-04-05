@@ -32,6 +32,7 @@ export function useGeminiSession() {
   // ── Playback using AudioBufferSourceNode (proven to produce sound) ─────
   const nextPlayTime = useRef<number>(0);
   const lastChunkId = useRef<string>("");
+  const recentChunks = useRef<Set<string>>(new Set());
   const speakingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ensurePlayback = useCallback(async () => {
@@ -49,8 +50,15 @@ export function useGeminiSession() {
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
-    // Deduplicate — skip if identical to last chunk
-    if (b64 === lastChunkId.current) return;
+    // Deduplicate — skip if we've seen this exact chunk recently
+    const chunkKey = b64.slice(0, 100); // Use first 100 chars as fingerprint
+    if (chunkKey === lastChunkId.current || recentChunks.current.has(chunkKey)) return;
+    recentChunks.current.add(chunkKey);
+    // Keep set small — only track last 20 chunks
+    if (recentChunks.current.size > 20) {
+      const first = recentChunks.current.values().next().value;
+      if (first) recentChunks.current.delete(first);
+    }
     lastChunkId.current = b64;
 
     // Decode base64 → Int16 → Float32
@@ -92,6 +100,7 @@ export function useGeminiSession() {
     playCtxRef.current = ctx;
     nextPlayTime.current = ctx.currentTime;
     lastChunkId.current = "";
+    recentChunks.current.clear();
     store.setAgentSpeaking(false);
   }, [store]);
 

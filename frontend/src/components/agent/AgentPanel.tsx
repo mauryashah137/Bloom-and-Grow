@@ -334,9 +334,11 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
               const willMinimize = !store.agentPanelMinimized;
               store.setAgentPanelMinimized(willMinimize);
               if (willMinimize) {
-                // Stop mic and camera when minimized
-                if (store.isMicActive) session.stopMic();
-                if (store.isCameraActive) session.stopCamera();
+                // Stop mic, camera, and audio when minimized
+                session.stopMic();
+                session.stopCamera();
+                session.stopPlayback();
+                setShowCameraPrompt(false);
               } else if (!willMinimize && isConnected) {
                 // Restart mic when expanded (camera stays off — user must re-enable)
                 if (!store.isMicActive) session.startMic();
