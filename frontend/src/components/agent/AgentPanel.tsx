@@ -141,20 +141,17 @@ function DiscountCard({ card }: { card: AgentActionCard }) {
   }
 
   if (isApproved) {
+    const reason = dr.reason || "";
     return (
       <div className="rounded-xl p-4 space-y-3 bg-green-500/10 border border-green-500/20">
-        <p className="text-white font-semibold text-center text-sm">Discount applied to service offerings</p>
+        <p className="text-white font-semibold text-center text-sm">Discount approved!</p>
         <div className="bg-white/10 rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-[#4db876] flex items-center justify-center shrink-0">
             <CheckCircle size={18} className="text-white" />
           </div>
           <div className="flex-1">
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#4db876] text-white font-bold">{pct}% off</span>
-            <p className="text-sm font-medium text-white mt-1">Landscaping service</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-white/40 line-through">${200}</p>
-            <p className="text-sm font-bold text-[#4db876]">${(200 * (1 - pct / 100)).toFixed(0)}</p>
+            <p className="text-sm font-medium text-white mt-1">{cleanText(reason) || "Applied to your order"}</p>
           </div>
         </div>
       </div>

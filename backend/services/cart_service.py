@@ -97,6 +97,7 @@ class CartService:
         cart = await self._cart.get_or_create(customer_id)
         cart["discount_pct"] = min(discount_pct, 100)  # Cap at 100%
         cart["discount_reason"] = reason
+        cart["offer_code"] = f"MANAGER-{int(discount_pct)}PCT"  # Replace any existing code
         cart["updated_at"] = time.time()
         await self._cart._save(customer_id, cart)
         if self._pricing:
