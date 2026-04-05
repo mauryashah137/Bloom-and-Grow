@@ -332,10 +332,17 @@ export function useGeminiSession() {
 
   // ── Disconnect ────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
+    // Close WebSocket FIRST to stop new audio arriving
+    if (wsRef.current) {
+      try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    // Stop mic immediately
     stopMic();
     stopCamera();
     stopPlayback();
-    // Close playback AudioContext to immediately stop all sound
+    // Close playback AudioContext to immediately kill all sound
     if (playCtxRef.current && playCtxRef.current.state !== "closed") {
       try { playCtxRef.current.close(); } catch {}
       playCtxRef.current = null;
@@ -344,11 +351,6 @@ export function useGeminiSession() {
     if (recCtxRef.current && recCtxRef.current.state !== "closed") {
       try { recCtxRef.current.close(); } catch {}
       recCtxRef.current = null;
-    }
-    if (wsRef.current) {
-      try { wsRef.current.send(JSON.stringify({ type: "end_session" })); } catch {}
-      wsRef.current.close();
-      wsRef.current = null;
     }
     store.resetSession();
   }, [store, stopMic, stopCamera, stopPlayback]);
