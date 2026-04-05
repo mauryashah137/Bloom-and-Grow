@@ -34,6 +34,7 @@ export default function CartPage() {
   const tax = cart?.tax ?? 0;
   const discount = cart?.discount_pct ?? 0;
   const discountAmt = cart?.discount_amount ?? 0;
+  const shipping = cart?.shipping ?? 0;
   const total = cart?.total ?? 0;
 
   return (
@@ -102,8 +103,8 @@ export default function CartPage() {
                   <span>${subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600">
-                  <span>Pickup</span>
-                  <span className="text-gray-400">Free</span>
+                  <span>Shipping</span>
+                  <span className={shipping === 0 ? "text-green-600" : ""}>{shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}</span>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>Tax</span>

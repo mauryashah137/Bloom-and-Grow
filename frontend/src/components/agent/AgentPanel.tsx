@@ -333,11 +333,13 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
           <button onClick={() => {
               const willMinimize = !store.agentPanelMinimized;
               store.setAgentPanelMinimized(willMinimize);
-              // Mute mic when minimized, unmute when expanded
-              if (willMinimize && store.isMicActive) {
-                session.stopMic();
-              } else if (!willMinimize && !store.isMicActive && isConnected) {
-                session.startMic();
+              if (willMinimize) {
+                // Stop mic and camera when minimized
+                if (store.isMicActive) session.stopMic();
+                if (store.isCameraActive) session.stopCamera();
+              } else if (!willMinimize && isConnected) {
+                // Restart mic when expanded (camera stays off — user must re-enable)
+                if (!store.isMicActive) session.startMic();
               }
             }}
             className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors">

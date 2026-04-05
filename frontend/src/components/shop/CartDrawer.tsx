@@ -132,7 +132,7 @@ export function CartDrawer({ onClose }: { onClose: () => void }) {
               <span>Subtotal</span><span>${subtotal.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-gray-600">
-              <span>Pickup</span><span className="text-green-600">Free</span>
+              <span>Shipping</span><span className={shipping === 0 ? "text-green-600" : ""}>{shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-gray-600">
               <span>Tax</span><span>${tax.toFixed(2)}</span>

@@ -82,15 +82,15 @@ export function useGeminiSession() {
     speakingTimer.current = setTimeout(() => store.setAgentSpeaking(false), 500);
   }, [store]);
 
-  const stopPlayback = useCallback(async () => {
-    const ctx = playCtxRef.current;
-    if (ctx && ctx.state === "running") {
-      // Suspend stops all playing audio immediately
-      await ctx.suspend();
-      // Resume immediately so new audio can play when it arrives
-      await ctx.resume();
-      nextPlayTime.current = ctx.currentTime;
+  const stopPlayback = useCallback(() => {
+    // Close and recreate AudioContext — only way to truly stop all scheduled audio
+    if (playCtxRef.current && playCtxRef.current.state !== "closed") {
+      try { playCtxRef.current.close(); } catch {}
     }
+    // Recreate immediately for next audio
+    const ctx = new AudioContext({ sampleRate: 24000 });
+    playCtxRef.current = ctx;
+    nextPlayTime.current = ctx.currentTime;
     lastChunkId.current = "";
     store.setAgentSpeaking(false);
   }, [store]);
