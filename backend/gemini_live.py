@@ -211,6 +211,7 @@ class GeminiLiveSession:
 
         self._audio_in_count = 0
         self._audio_sample_rate = 16000  # Will be updated by client
+        self._last_audio_hash = ""  # Dedup consecutive identical audio
         self._connect_task = asyncio.create_task(self._connect())
 
     async def _connect(self):
@@ -295,10 +296,15 @@ class GeminiLiveSession:
                     audio_to_send = audio_b
 
                 if audio_to_send:
-                    await self._queue.put({
-                        "type": "audio_chunk",
-                        "data": base64.b64encode(audio_to_send).decode(),
-                    })
+                    # Dedup: skip if identical to last audio chunk
+                    import hashlib
+                    chunk_hash = hashlib.md5(audio_to_send[:200]).hexdigest()
+                    if chunk_hash != self._last_audio_hash:
+                        self._last_audio_hash = chunk_hash
+                        await self._queue.put({
+                            "type": "audio_chunk",
+                            "data": base64.b64encode(audio_to_send).decode(),
+                        })
 
                 # ── Server content ───────────────────────────────────────
                 if response.server_content:
