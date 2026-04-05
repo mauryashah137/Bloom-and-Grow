@@ -259,14 +259,12 @@ export function useGeminiSession() {
           break;
 
         case "navigate":
-          // Navigate using Next.js-friendly approach — preserve panel state
+          // Set pending navigation — StorefrontLayout will use router.push() (no page reload)
           if (ev.page) {
             const routes: Record<string, string> = { cart: "/cart", checkout: "/checkout", shop: "/shop", orders: "/orders", support: "/support", home: "/" };
             const route = routes[ev.page];
-            if (route && typeof window !== "undefined") {
-              // Save panel state before navigation so it restores after reload
-              try { localStorage.setItem("bloom_panel_open", "true"); } catch {}
-              window.location.href = route;
+            if (route) {
+              store.setPendingNavigation(route);
             }
           }
           break;

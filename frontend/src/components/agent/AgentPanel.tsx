@@ -210,15 +210,6 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const fileRef  = useRef<HTMLInputElement>(null);
   const [textInput, setTextInput] = useState("");
 
-  // Restore panel state after page navigation
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("bloom_panel_open") === "true") {
-        store.setAgentPanelOpen(true);
-        localStorage.removeItem("bloom_panel_open");
-      }
-    } catch {}
-  }, []);
 
   const isConnected  = store.sessionStatus === "connected";
   const isConnecting = store.sessionStatus === "connecting";
@@ -232,7 +223,6 @@ export function AgentPanel({ onNavigateProduct }: { onNavigateProduct?: (id: str
   const handleEndCall = useCallback(() => {
     session.disconnect();
     store.setAgentPanelOpen(false);
-    try { localStorage.removeItem("bloom_panel_open"); } catch {}
   }, [session, store]);
 
   const handleCameraToggle = useCallback(async () => {

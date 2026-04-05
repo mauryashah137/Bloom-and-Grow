@@ -66,6 +66,8 @@ interface AppState {
   setAgentPanelMinimized: (b: boolean) => void;
   setShowCart: (b: boolean) => void;
   setShowTranscript: (b: boolean) => void;
+  pendingNavigation: string | null;
+  setPendingNavigation: (route: string | null) => void;
   resetSession: () => void;
 }
 
@@ -92,6 +94,7 @@ export const useStore = create<AppState>((set) => ({
   agentPanelMinimized: false,
   showCart: false,
   showTranscript: false,
+  pendingNavigation: null,
   customerId: "demo_customer_001",
 
   setSessionStatus:       (sessionStatus) => set({ sessionStatus }),
@@ -113,6 +116,7 @@ export const useStore = create<AppState>((set) => ({
   setAgentPanelMinimized: (agentPanelMinimized) => set({ agentPanelMinimized }),
   setShowCart:            (showCart) => set({ showCart }),
   setShowTranscript:      (showTranscript) => set({ showTranscript }),
+  setPendingNavigation:   (pendingNavigation) => set({ pendingNavigation }),
 
   addTranscript:     (e) => set((s) => ({ transcript: [...s.transcript, e] })),
   addActionCard:     (card) => set((s) => ({ actionCards: [...s.actionCards, card] })),

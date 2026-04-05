@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useStore } from "@/store";
 import { Search, ShoppingCart, User, ChevronDown } from "lucide-react";
@@ -18,6 +18,15 @@ export function StorefrontLayout({ children, promoText = "Up to 20% OFF + free s
   const router = useRouter();
   const cartCount = store.cart?.items?.length ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Handle navigation requests from the chatbot — uses router.push (no page reload)
+  useEffect(() => {
+    if (store.pendingNavigation) {
+      const route = store.pendingNavigation;
+      store.setPendingNavigation(null);
+      router.push(route);
+    }
+  }, [store.pendingNavigation, router, store]);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--cream)" }}>
