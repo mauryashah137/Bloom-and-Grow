@@ -74,7 +74,7 @@ export default function CartPage() {
                 <div key={item.product_id} className="flex items-center gap-5 bg-white rounded-2xl p-5">
                   {/* Image */}
                   <div className="w-24 h-24 rounded-xl shrink-0 flex items-center justify-center bg-stone-100 overflow-hidden">
-                    {item.image_url?.startsWith("http") ? (
+                    {item.image_url?.match(/^(http|\/images)/) ? (
                       <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-4xl">🌱</span>

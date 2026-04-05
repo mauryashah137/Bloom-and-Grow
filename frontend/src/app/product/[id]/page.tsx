@@ -144,7 +144,7 @@ export default function ProductPage() {
           {/* ── Left: Gallery ──────────────────────────────────────── */}
           <div className="space-y-4">
             <div className="w-full aspect-square rounded-2xl flex items-center justify-center relative overflow-hidden" style={{ background: "var(--cream-100)" }}>
-              {product.image_url?.startsWith("http") ? (
+              {product.image_url?.match(/^(http|\/images)/) ? (
                 <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-[120px]">{galleryImages[galleryIdx]}</span>
@@ -154,7 +154,7 @@ export default function ProductPage() {
               )}
             </div>
             <div className="flex items-center justify-center gap-3">
-              {product.image_url?.startsWith("http") ? (
+              {product.image_url?.match(/^(http|\/images)/) ? (
                 <button
                   className="w-16 h-16 rounded-xl flex items-center justify-center transition-all ring-2 ring-green-600 bg-green-50 overflow-hidden"
                 >
@@ -323,7 +323,7 @@ export default function ProductPage() {
                 return (
                   <Link key={p.id} href={`/product/${p.id}`} className="bg-white rounded-2xl overflow-hidden hover:shadow-md transition-all border border-gray-100">
                     <div className="h-32 flex items-center justify-center overflow-hidden" style={{ background: "var(--cream-100)" }}>
-                      {p.image_url?.startsWith("http") ? (
+                      {p.image_url?.match(/^(http|\/images)/) ? (
                         <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-4xl">{emojis[0]}</span>

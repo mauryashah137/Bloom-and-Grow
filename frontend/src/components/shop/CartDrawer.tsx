@@ -99,7 +99,7 @@ export function CartDrawer({ onClose }: { onClose: () => void }) {
             cart.items.map(item => (
               <div key={item.product_id} className="flex items-center gap-4">
                 <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-gray-50 flex items-center justify-center">
-                  {item.image_url?.startsWith("http") ? (
+                  {item.image_url?.match(/^(http|\/images)/) ? (
                     <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-3xl">🌱</span>
