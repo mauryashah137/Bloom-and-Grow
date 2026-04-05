@@ -655,23 +655,62 @@ async def get_customer(customer_id: str):
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/search")
 async def search_products(q: str = "", limit: int = 20):
-    """Search products. If no exact matches, return similar products."""
+    """Search products with fuzzy matching and similar product fallback."""
     if not q.strip():
         return {"products": [], "query": q, "similar": False}
 
-    results = await catalog.search(query=q.strip(), limit=limit)
+    query = q.strip()
+
+    # Try direct search first
+    results = await catalog.search(query=query, limit=limit)
     if results:
         return {"products": [
             {k: v for k, v in p.items() if k != "complementary_products"} for p in results
         ], "query": q, "similar": False}
 
-    # No exact match — find similar products by searching individual words
+    # Try common variations: plural/singular, partial
+    variations = [query]
+    if query.endswith("s"):
+        variations.append(query[:-1])  # roses → rose
+    elif query.endswith("es"):
+        variations.append(query[:-2])  # boxes → box
+    else:
+        variations.append(query + "s")  # tool → tools
+
+    for var in variations[1:]:
+        results = await catalog.search(query=var, limit=limit)
+        if results:
+            return {"products": [
+                {k: v for k, v in p.items() if k != "complementary_products"} for p in results
+            ], "query": q, "similar": False}
+
+    # No exact match — find similar by searching individual words
     similar = []
     seen = set()
-    for word in q.strip().split():
+    for word in query.split():
         if len(word) > 2:
             matches = await catalog.search(query=word, limit=5)
             for m in matches:
+                if m["id"] not in seen:
+                    seen.add(m["id"])
+                    similar.append({k: v for k, v in m.items() if k != "complementary_products"})
+
+    # Also try category matching
+    category_map = {
+        "flower": "plants", "flowers": "plants", "plant": "plants",
+        "dirt": "soil", "earth": "soil", "ground": "soil",
+        "tool": "tools", "equipment": "tools", "shears": "tools",
+        "pot": "pots", "planter": "pots", "container": "pots",
+        "food": "fertilizers", "feed": "fertilizers", "nutrient": "fertilizers",
+        "bug": "pest-control", "pest": "pest-control", "spray": "pest-control",
+        "light": "lighting", "lamp": "lighting", "grow light": "lighting",
+        "decoration": "decor", "macrame": "decor", "hanger": "decor",
+    }
+    for word in query.lower().split():
+        cat = category_map.get(word)
+        if cat:
+            cat_results = await catalog.search(category=cat, limit=5)
+            for m in cat_results:
                 if m["id"] not in seen:
                     seen.add(m["id"])
                     similar.append({k: v for k, v in m.items() if k != "complementary_products"})

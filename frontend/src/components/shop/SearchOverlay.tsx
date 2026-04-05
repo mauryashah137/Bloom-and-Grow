@@ -10,13 +10,22 @@ interface SearchProduct {
   id: string;
   name: string;
   price: number;
+  sale_price?: number | null;
   category: string;
   rating: number;
+  review_count?: number;
+  description?: string;
   image_url?: string;
 }
 
+const CATEGORY_EMOJI: Record<string, string> = {
+  plants: "🌿", soil: "🌍", fertilizers: "🌸", pots: "🏺",
+  tools: "🔧", lighting: "💡", accessories: "✨", bundles: "🎁",
+  "pest-control": "🛡️", decor: "🎍",
+};
+
 interface SearchResponse {
-  results: SearchProduct[];
+  products: SearchProduct[];
   similar?: boolean;
   query?: string;
 }
@@ -65,7 +74,7 @@ export function SearchOverlay({ isOpen, onClose }: { isOpen: boolean; onClose: (
     try {
       const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`);
       const data: SearchResponse = await res.json();
-      setResults(data.results || []);
+      setResults(data.products || []);
       setIsSimilar(!!data.similar);
     } catch {
       setResults([]);
@@ -114,53 +123,74 @@ export function SearchOverlay({ isOpen, onClose }: { isOpen: boolean; onClose: (
           )}
 
           {!loading && searched && isSimilar && results.length > 0 && (
-            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-2 mb-4">
-              Showing similar products for &apos;{query}&apos;
-            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+              <p className="text-sm text-amber-800 font-medium">We don&apos;t carry &quot;{query}&quot; specifically</p>
+              <p className="text-xs text-amber-600 mt-0.5">Here are similar products you might like:</p>
+            </div>
           )}
 
           {!loading && searched && results.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              <Search size={40} className="mx-auto mb-3 text-gray-300" />
-              <p>No products found. Try a different search term.</p>
+            <div className="text-center py-12">
+              <div className="text-5xl mb-3">🔍</div>
+              <p className="text-gray-700 font-medium">No products found for &quot;{query}&quot;</p>
+              <p className="text-gray-400 text-sm mt-1">Try searching for: plants, soil, tools, pots, fertilizer</p>
             </div>
           )}
 
           {!loading && results.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {results.map((product) => (
-                <Link
-                  key={product.id}
-                  href={`/product/${product.id}`}
-                  onClick={onClose}
-                  className="flex gap-4 p-4 rounded-xl border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 group-hover:text-green-800 truncate">
-                      {product.name}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{product.category}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="font-semibold" style={{ color: "var(--green-700)" }}>
-                        ${product.price.toFixed(2)}
-                      </span>
-                      {product.rating > 0 && (
-                        <span className="flex items-center gap-0.5 text-xs text-amber-600">
-                          <Star size={12} fill="currentColor" />
-                          {product.rating.toFixed(1)}
-                        </span>
-                      )}
+              {results.map((product) => {
+                const emoji = CATEGORY_EMOJI[product.category] || "🌱";
+                const displayPrice = product.sale_price ?? product.price;
+                const onSale = product.sale_price != null;
+                return (
+                  <Link
+                    key={product.id}
+                    href={`/product/${product.id}`}
+                    onClick={onClose}
+                    className="flex gap-3 p-4 rounded-xl border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group"
+                  >
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--cream-100)" }}>
+                      <span className="text-2xl">{emoji}</span>
                     </div>
-                  </div>
-                </Link>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 group-hover:text-green-800 text-sm leading-tight">
+                        {product.name}
+                      </h3>
+                      <p className="text-[10px] text-gray-400 mt-0.5 capitalize">{product.category}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="font-bold text-sm" style={{ color: "var(--green-700)" }}>
+                          ${displayPrice.toFixed(2)}
+                        </span>
+                        {onSale && (
+                          <span className="text-xs text-gray-400 line-through">${product.price.toFixed(2)}</span>
+                        )}
+                        {product.rating > 0 && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
+                            <Star size={10} fill="currentColor" />
+                            {product.rating.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
 
           {!loading && !searched && (
             <div className="text-center py-12 text-gray-400">
-              <Search size={40} className="mx-auto mb-3 text-gray-200" />
-              <p>Start typing to search products</p>
+              <div className="text-5xl mb-3">🌱</div>
+              <p className="text-gray-500">Search for plants, tools, soil, pots & more</p>
+              <div className="flex flex-wrap justify-center gap-2 mt-4">
+                {["Monstera", "Pothos", "Soil", "Fertilizer", "Tools", "Pots"].map(s => (
+                  <button key={s} onClick={() => { setQuery(s); doSearch(s); }}
+                    className="px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-600 hover:bg-green-50 hover:text-green-700 transition-colors">
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
