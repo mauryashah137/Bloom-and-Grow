@@ -13,12 +13,28 @@ interface StorefrontLayoutProps {
   promoText?: string;
 }
 
+const API = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws")
+  .replace(/^wss?:\/\//, "https://").replace("/ws", "");
+
 export function StorefrontLayout({ children, promoText = "20% OFF with code SPRING20" }: StorefrontLayoutProps) {
   const store  = useStore();
   const router = useRouter();
   const cartCount = store.cart?.items?.length ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
 
+  // Poll for pending approvals every 5 seconds
+  useEffect(() => {
+    const check = () => {
+      fetch(`${API}/api/manager/approvals`)
+        .then(r => r.ok ? r.json() : { approvals: [] })
+        .then(d => setPendingApprovals((d.approvals || []).filter((a: any) => a.status === "pending").length))
+        .catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Handle navigation requests from the chatbot — uses router.push (no page reload)
   useEffect(() => {
@@ -95,14 +111,19 @@ export function StorefrontLayout({ children, promoText = "20% OFF with code SPRI
               { label: "Plant Care", href: "/care" },
               { label: "Services", href: "/services" },
               { label: "Orders", href: "/orders" },
-              { label: "Manager", href: "/manager" },
-            ].map(item => (
+              { label: "Manager", href: "/manager", showDot: true },
+            ].map((item: any) => (
               <Link
                 key={item.label}
                 href={item.href}
-                className="text-sm text-gray-600 hover:text-green-700 whitespace-nowrap transition-colors"
+                className="relative text-sm text-gray-600 hover:text-green-700 whitespace-nowrap transition-colors"
               >
                 {item.label}
+                {item.showDot && pendingApprovals > 0 && (
+                  <span className="absolute -top-1 -right-3 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {pendingApprovals}
+                  </span>
+                )}
               </Link>
             ))}
           </div>
