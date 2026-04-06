@@ -64,9 +64,8 @@ export function StorefrontLayout({ children, promoText = "20% OFF with code SPRI
 
           {/* Nav links */}
           <nav className="flex items-center gap-6 flex-1">
-            <Link href="/" className="flex items-center gap-1 hover:text-green-700 transition-colors">
-              <span className="text-sm font-medium text-gray-700">Shop</span>
-              <ChevronDown size={14} className="text-gray-500" />
+            <Link href="/" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">
+              Shop
             </Link>
             <Link href="/shop?filter=sale" className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors">Sale</Link>
             <Link href="/bundles" className="text-sm font-medium text-gray-700 hover:text-green-700 transition-colors">Bundles</Link>
