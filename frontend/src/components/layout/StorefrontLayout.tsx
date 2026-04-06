@@ -48,12 +48,12 @@ export function StorefrontLayout({ children, promoText = "20% OFF with code SPRI
   return (
     <div className="min-h-screen" style={{ background: "var(--cream)" }}>
       {/* ── Promo bar ──────────────────────────────────────────────────── */}
-      <div className="text-center py-2 text-sm font-medium text-gray-700" style={{ background: "#e8f5ee" }}>
+      <div className={`text-center py-2 text-sm font-medium text-gray-700 transition-all duration-300 ${store.agentPanelOpen ? "mr-96" : ""}`} style={{ background: "#e8f5ee" }}>
         {promoText}
       </div>
 
       {/* ── Top nav ────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
+      <header className={`bg-white border-b border-gray-100 sticky top-0 z-30 transition-all duration-300 ${store.agentPanelOpen ? "mr-96" : ""}`}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center gap-6">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
