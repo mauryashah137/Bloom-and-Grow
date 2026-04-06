@@ -160,15 +160,20 @@ export default function CartPage() {
         <section className="mt-12">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Recently viewed</h2>
           <div className="grid grid-cols-4 gap-4">
-            {["Budget Bloom Mix", "Bloom & Grow", "Bloom & Grow Soil", "Spring Mix"].map((n, i) => (
-              <div key={i} className="bg-white rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-all">
-                <div className="h-28 flex items-center justify-center" style={{ background: "var(--cream-100)" }}>
-                  <span className="text-4xl">🌱</span>
+            {[
+              { id: "P006", name: "Premium Potting Mix", image: "/images/products/p006-potting-mix.png" },
+              { id: "P008", name: "Liquid Fertilizer", image: "/images/products/p008-fertilizer.png" },
+              { id: "P001", name: "Monstera Deliciosa", image: "/images/products/p001-monstera.png" },
+              { id: "P012", name: "Pruning Shears", image: "/images/products/p012-pruning-shears.png" },
+            ].map(item => (
+              <Link key={item.id} href={`/product/${item.id}`} className="bg-white rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-all">
+                <div className="h-28 flex items-center justify-center overflow-hidden" style={{ background: "var(--cream-100)" }}>
+                  <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="p-3">
-                  <p className="text-sm font-medium text-gray-700">{n}</p>
+                  <p className="text-sm font-medium text-gray-700">{item.name}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
